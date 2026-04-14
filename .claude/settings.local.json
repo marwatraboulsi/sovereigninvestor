@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/marwatraboulsi/Documents/Claude/Projects/Financial and Wealth Planning/**)",
+      "Bash(python3 -c ':*)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(npx create-expo-app@latest . --template blank-typescript)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx expo:*)",
+      "Bash(node -e \"const pkg = require\\('/Users/marwatraboulsi/Desktop/Personal Fund OS/node_modules/expo-speech-recognition/package.json'\\); console.log\\(pkg.main, pkg.exports?.['.']\\)\")",
+      "Bash(xcrun simctl:*)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(ls ~/.claude/settings*.json)",
+      "Bash(tree -L 2 \"/Users/marwatraboulsi/Desktop/Personal Fund OS\" --ignore \"node_modules\")"
+    ]
+  }
+}

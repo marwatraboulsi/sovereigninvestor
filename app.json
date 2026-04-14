@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Sovereign Investor",
+    "slug": "personal-fund-os",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0d1f1b"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.sovereigninvestor.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow Sovereign Investor to use speech recognition for voice input.",
+        "NSMicrophoneUsageDescription": "Allow Sovereign Investor to use the microphone for voice input."
+      }
+    },
+    "android": {
+      "package": "com.sovereigninvestor.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0d1f1b"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-apple-authentication",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Sovereign Investor to use the microphone for voice input.",
+          "speechRecognitionPermission": "Allow Sovereign Investor to use speech recognition for voice input."
+        }
+      ]
+    ],
+    "scheme": "sovereigninvestor",
+    "newArchEnabled": true,
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a42ba7c1-849f-4682-bcec-27e2d2dfc9e5"
+      }
+    }
+  }
+}
