@@ -14,10 +14,12 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sovereigninvestor.app",
-      "buildNumber": "1",
+      "buildNumber": "3",
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Allow Sovereign Investor to use speech recognition for voice input.",
-        "NSMicrophoneUsageDescription": "Allow Sovereign Investor to use the microphone for voice input."
+        "NSMicrophoneUsageDescription": "Allow Sovereign Investor to use the microphone for voice input.",
+        "NSPhotoLibraryUsageDescription": "Allow Sovereign Investor to access your photo library.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
