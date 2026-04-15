@@ -16,11 +16,12 @@ import { supabase } from '@/lib/supabase';
 import { BG, S1, LINE, W, GOLD, G1, G2, G3, SERIF, BODY } from '@/theme';
 
 export default function AuthScreen() {
-  const [mode, setMode]         = useState<'login' | 'signup'>('login');
+  const [mode, setMode]         = useState<'login' | 'signup' | 'forgot'>('login');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
+  const [success, setSuccess]   = useState<string | null>(null);
 
   // ── Apple Sign In ────────────────────────────────────────────────────────────
 
@@ -45,6 +46,29 @@ export default function AuthScreen() {
       if (err.code !== 'ERR_REQUEST_CANCELED') {
         setError(err.message ?? 'Apple sign in failed. Please try again.');
       }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Forgot Password ──────────────────────────────────────────────────────────
+
+  async function handleForgotPassword() {
+    setError(null);
+    setSuccess(null);
+    if (!email.trim()) {
+      setError('Please enter your email address.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'sovereigninvestor://reset-password',
+      });
+      if (err) throw err;
+      setSuccess('Check your email for a password reset link.');
+    } catch (err: any) {
+      setError(err.message ?? 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -112,7 +136,7 @@ export default function AuthScreen() {
               <View style={s.dividerLine} />
             </View>
 
-            {/* Email / Password */}
+            {/* Email */}
             <TextInput
               style={s.input}
               value={email}
@@ -124,22 +148,37 @@ export default function AuthScreen() {
               autoCorrect={false}
               editable={!loading}
             />
-            <TextInput
-              style={s.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Password"
-              placeholderTextColor={G2}
-              secureTextEntry
-              autoCapitalize="none"
-              editable={!loading}
-            />
 
-            {error ? <Text style={s.errorText}>{error}</Text> : null}
+            {/* Password — hidden in forgot mode */}
+            {mode !== 'forgot' && (
+              <TextInput
+                style={s.input}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Password"
+                placeholderTextColor={G2}
+                secureTextEntry
+                autoCapitalize="none"
+                editable={!loading}
+              />
+            )}
+
+            {/* Forgot password link — login mode only */}
+            {mode === 'login' && (
+              <TouchableOpacity
+                onPress={() => { setMode('forgot'); setError(null); setSuccess(null); }}
+                disabled={loading}
+              >
+                <Text style={s.forgotText}>Forgot password?</Text>
+              </TouchableOpacity>
+            )}
+
+            {error   ? <Text style={s.errorText}>{error}</Text>   : null}
+            {success ? <Text style={s.successText}>{success}</Text> : null}
 
             <TouchableOpacity
               style={[s.btn, loading && s.btnDisabled]}
-              onPress={handleSubmit}
+              onPress={mode === 'forgot' ? handleForgotPassword : handleSubmit}
               disabled={loading}
               activeOpacity={0.8}
             >
@@ -147,20 +186,22 @@ export default function AuthScreen() {
                 <ActivityIndicator size="small" color={BG} />
               ) : (
                 <Text style={s.btnText}>
-                  {mode === 'login' ? 'Sign In' : 'Create Account'}
+                  {mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'}
                 </Text>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
               style={s.toggle}
-              onPress={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(null); }}
+              onPress={() => { setMode(mode === 'signup' ? 'login' : mode === 'forgot' ? 'login' : 'signup'); setError(null); setSuccess(null); }}
               disabled={loading}
             >
               <Text style={s.toggleText}>
                 {mode === 'login'
                   ? "Don't have an account? Sign up"
-                  : 'Already have an account? Sign in'}
+                  : mode === 'signup'
+                  ? 'Already have an account? Sign in'
+                  : 'Back to sign in'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -229,7 +270,9 @@ const s = StyleSheet.create({
     fontFamily: BODY,
   },
 
-  errorText: { color: '#F87171', fontSize: 13, lineHeight: 18 },
+  errorText:   { color: '#F87171', fontSize: 13, lineHeight: 18 },
+  successText: { color: '#4ADE80', fontSize: 13, lineHeight: 18 },
+  forgotText:  { color: G2, fontSize: 13, fontFamily: BODY, textAlign: 'right' },
 
   btn: {
     backgroundColor: GOLD,

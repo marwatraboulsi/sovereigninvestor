@@ -1,9 +1,11 @@
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import { useFonts } from 'expo-font';
+import { useEffect } from 'react';
 import { Lora_400Regular, Lora_600SemiBold, Lora_700Bold } from '@expo-google-fonts/lora';
 import { Spectral_400Regular, Spectral_500Medium, Spectral_600SemiBold } from '@expo-google-fonts/spectral';
+import { supabase } from '@/lib/supabase';
 import { BG, W } from '@/theme';
 
 export default function RootLayout() {
@@ -15,6 +17,16 @@ export default function RootLayout() {
     Spectral_500Medium,
     Spectral_600SemiBold,
   });
+
+  // Listen for Supabase PASSWORD_RECOVERY event (deep link from reset email)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        router.push('/reset-password');
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Hold splash until fonts are ready - avoids font flash
   if (!fontsLoaded) {
@@ -39,7 +51,8 @@ export default function RootLayout() {
         <Stack.Screen name="auth"       options={{ headerShown: false }} />
         <Stack.Screen name="privacy"       options={{ headerShown: true }} />
         <Stack.Screen name="contact"       options={{ headerShown: true }} />
-        <Stack.Screen name="conversations" options={{ headerShown: true }} />
+        <Stack.Screen name="conversations"  options={{ headerShown: true }} />
+        <Stack.Screen name="reset-password" options={{ headerShown: false }} />
         <Stack.Screen name="welcome"    options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         {/* skill/[id] uses Stack.Screen internally to set its own title */}
