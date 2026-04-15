@@ -14,7 +14,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sovereigninvestor.app",
-      "buildNumber": "7",
+      "buildNumber": "9",
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Allow Sovereign Investor to use speech recognition for voice input.",
         "NSMicrophoneUsageDescription": "Allow Sovereign Investor to use the microphone for voice input.",
@@ -36,9 +36,12 @@
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
-      ["@react-native-google-signin/google-signin", {
-        "iosUrlScheme": "com.googleusercontent.apps.484400669616-3itmmfi6fuh0e7ukm286rbirc78joqjf"
-      }],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.484400669616-3itmmfi6fuh0e7ukm286rbirc78joqjf"
+        }
+      ],
       [
         "expo-speech-recognition",
         {

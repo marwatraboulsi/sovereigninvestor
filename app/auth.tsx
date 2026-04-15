@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, GoogleSigninButton, statusCodes } from '@react-native-google-signin/google-signin';
+import * as Crypto from 'expo-crypto';
 import { supabase } from '@/lib/supabase';
 import { BG, S1, LINE, W, GOLD, G1, G2, G3, SERIF, BODY } from '@/theme';
 
@@ -64,12 +65,18 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       await GoogleSignin.hasPlayServices();
-      const response = await GoogleSignin.signIn();
+      const rawNonce = Math.random().toString(36).substring(2, 18);
+      const hashedNonce = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        rawNonce
+      );
+      const response = await GoogleSignin.signIn({ nonce: hashedNonce });
       const idToken = response.data?.idToken;
       if (!idToken) throw new Error('No ID token from Google.');
       const { error: err } = await supabase.auth.signInWithIdToken({
         provider: 'google',
         token: idToken,
+        nonce: rawNonce,
       });
       if (err) throw err;
       router.replace('/');
