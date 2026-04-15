@@ -12,8 +12,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { GoogleSignin, GoogleSigninButton, statusCodes } from '@react-native-google-signin/google-signin';
 import { supabase } from '@/lib/supabase';
 import { BG, S1, LINE, W, GOLD, G1, G2, G3, SERIF, BODY } from '@/theme';
+
+GoogleSignin.configure({
+  iosClientId: '484400669616-3itmmfi6fuh0e7ukm286rbirc78joqjf.apps.googleusercontent.com',
+  scopes: ['email', 'profile'],
+});
 
 export default function AuthScreen() {
   const [mode, setMode]         = useState<'login' | 'signup' | 'forgot'>('login');
@@ -45,6 +51,31 @@ export default function AuthScreen() {
     } catch (err: any) {
       if (err.code !== 'ERR_REQUEST_CANCELED') {
         setError(err.message ?? 'Apple sign in failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Google Sign In ───────────────────────────────────────────────────────────
+
+  async function handleGoogleSignIn() {
+    setError(null);
+    setLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices();
+      const response = await GoogleSignin.signIn();
+      const idToken = response.data?.idToken;
+      if (!idToken) throw new Error('No ID token from Google.');
+      const { error: err } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
+      if (err) throw err;
+      router.replace('/');
+    } catch (err: any) {
+      if (err.code !== statusCodes.SIGN_IN_CANCELLED) {
+        setError(err.message ?? 'Google sign in failed. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -127,6 +158,15 @@ export default function AuthScreen() {
               cornerRadius={12}
               style={s.appleBtn}
               onPress={handleAppleSignIn}
+            />
+
+            {/* Google Sign In */}
+            <GoogleSigninButton
+              style={s.googleBtn}
+              size={GoogleSigninButton.Size.Wide}
+              color={GoogleSigninButton.Color.Light}
+              onPress={handleGoogleSignIn}
+              disabled={loading}
             />
 
             {/* Divider */}
@@ -252,7 +292,8 @@ const s = StyleSheet.create({
   // ── Form ──
   form:     { gap: 14 },
 
-  appleBtn: { width: '100%', height: 52 },
+  appleBtn:  { width: '100%', height: 52 },
+  googleBtn: { width: '100%', height: 52 },
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: G3 },
