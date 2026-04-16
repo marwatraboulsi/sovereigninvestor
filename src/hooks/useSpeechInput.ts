@@ -9,45 +9,43 @@ interface UseSpeechInputOptions {
 }
 
 export function useSpeechInput({ onResult }: UseSpeechInputOptions) {
-  const [isListening, setIsListening] = useState(false);
-  const [isAvailable, setIsAvailable] = useState(false);
+  const [isListening, setIsListening]   = useState(false);
+  const [isAvailable, setIsAvailable]   = useState(false);
 
-  // Check availability on mount
   useEffect(() => {
-    ExpoSpeechRecognitionModule.isRecognitionAvailable().then(setIsAvailable);
+    ExpoSpeechRecognitionModule.isRecognitionAvailable()
+      .then(setIsAvailable)
+      .catch(() => setIsAvailable(false));
   }, []);
 
-  // Listen for results
   useSpeechRecognitionEvent('result', (event) => {
-    const transcript = event.results?.[0]?.transcript;
-    if (transcript) {
-      onResult(transcript);
-    }
+    try {
+      const transcript = event.results?.[0]?.transcript;
+      if (transcript) onResult(transcript);
+    } catch {}
   });
 
-  // Stop listening when recognition ends
-  useSpeechRecognitionEvent('end', () => {
-    setIsListening(false);
-  });
-
-  useSpeechRecognitionEvent('error', () => {
-    setIsListening(false);
-  });
+  useSpeechRecognitionEvent('end', () => setIsListening(false));
+  useSpeechRecognitionEvent('error', () => setIsListening(false));
 
   const toggle = useCallback(async () => {
-    if (isListening) {
-      ExpoSpeechRecognitionModule.stop();
+    try {
+      if (isListening) {
+        ExpoSpeechRecognitionModule.stop();
+        setIsListening(false);
+      } else {
+        const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+        if (!granted) return;
+        ExpoSpeechRecognitionModule.start({
+          lang: 'en-US',
+          interimResults: false,
+          maxAlternatives: 1,
+          continuous: false,
+        });
+        setIsListening(true);
+      }
+    } catch {
       setIsListening(false);
-    } else {
-      const { granted } = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!granted) return;
-      ExpoSpeechRecognitionModule.start({
-        lang: 'en-US',
-        interimResults: false,
-        maxAlternatives: 1,
-        continuous: false,
-      });
-      setIsListening(true);
     }
   }, [isListening]);
 

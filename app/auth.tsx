@@ -12,7 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { GoogleSignin, GoogleSigninButton, statusCodes } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { FontAwesome } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { supabase } from '@/lib/supabase';
 import { BG, S1, LINE, W, GOLD, G1, G2, G3, SERIF, BODY } from '@/theme';
@@ -168,13 +169,15 @@ export default function AuthScreen() {
             />
 
             {/* Google Sign In */}
-            <GoogleSigninButton
+            <TouchableOpacity
               style={s.googleBtn}
-              size={GoogleSigninButton.Size.Wide}
-              color={GoogleSigninButton.Color.Light}
               onPress={handleGoogleSignIn}
               disabled={loading}
-            />
+              activeOpacity={0.8}
+            >
+              <FontAwesome name="google" size={18} color="#4285F4" />
+              <Text style={s.googleBtnText}>Sign in with Google</Text>
+            </TouchableOpacity>
 
             {/* Divider */}
             <View style={s.dividerRow}>
@@ -299,8 +302,23 @@ const s = StyleSheet.create({
   // ── Form ──
   form:     { gap: 14 },
 
-  appleBtn:  { width: '100%', height: 52 },
-  googleBtn: { width: '100%', height: 52 },
+  appleBtn: { width: '100%', height: 52 },
+  googleBtn: {
+    width: '100%', height: 52,
+    backgroundColor: W,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  googleBtnText: {
+    color: '#1F1F1F',
+    fontSize: 15,
+    fontWeight: '600',
+    fontFamily: BODY,
+    letterSpacing: 0.2,
+  },
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: G3 },
