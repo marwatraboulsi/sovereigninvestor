@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -9,24 +9,18 @@ interface UseSpeechInputOptions {
 }
 
 export function useSpeechInput({ onResult }: UseSpeechInputOptions) {
-  const [isListening, setIsListening]   = useState(false);
-  const [isAvailable, setIsAvailable]   = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isAvailable]                 = useState(true);
 
-  useEffect(() => {
-    ExpoSpeechRecognitionModule.isRecognitionAvailable()
-      .then(setIsAvailable)
-      .catch(() => setIsAvailable(false));
-  }, []);
-
-  useSpeechRecognitionEvent('result', (event) => {
+  useSpeechRecognitionEvent('result', useCallback((event: any) => {
     try {
-      const transcript = event.results?.[0]?.transcript;
+      const transcript = event?.results?.[0]?.transcript;
       if (transcript) onResult(transcript);
     } catch {}
-  });
+  }, [onResult]));
 
-  useSpeechRecognitionEvent('end', () => setIsListening(false));
-  useSpeechRecognitionEvent('error', () => setIsListening(false));
+  useSpeechRecognitionEvent('end',   useCallback(() => setIsListening(false), []));
+  useSpeechRecognitionEvent('error', useCallback(() => setIsListening(false), []));
 
   const toggle = useCallback(async () => {
     try {
