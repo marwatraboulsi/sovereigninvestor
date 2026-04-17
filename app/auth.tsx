@@ -127,6 +127,9 @@ export default function AuthScreen() {
         const { error: err } = await supabase.auth.signInWithPassword({ email, password });
         if (err) throw err;
       } else {
+        // Clear any stale session (e.g. from a previous Google sign-in attempt)
+        // to avoid "Nonces mismatch" errors from Supabase's auth state.
+        await supabase.auth.signOut();
         const { error: err } = await supabase.auth.signUp({ email, password });
         if (err) throw err;
       }
