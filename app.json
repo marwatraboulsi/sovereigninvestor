@@ -14,7 +14,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sovereigninvestor.app",
-      "buildNumber": "16",
+      "buildNumber": "14",
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Allow Sovereign Investor to use speech recognition for voice input.",
         "NSMicrophoneUsageDescription": "Allow Sovereign Investor to use the microphone for voice input.",

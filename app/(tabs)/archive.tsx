@@ -10,11 +10,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 import { useAnalysisArchive } from '@/hooks/useAnalysisArchive';
 import type { SavedAnalysis } from '@/types';
-import { supabase } from '@/lib/supabase';
-import { AuthGate } from '@/components/AuthGate';
 
 import { BG, S1, LINE, W, G1, G2, SERIF, BODY } from '@/theme';
 
@@ -47,26 +45,6 @@ function daysUntilExpiry(expiresAt: number): number {
 }
 
 export default function ArchiveScreen() {
-  const [hasSession, setHasSession] = useState<boolean | null>(null);
-
-  useFocusEffect(useCallback(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setHasSession(!!session);
-    });
-  }, []));
-
-  if (hasSession === null) return <View style={{ flex: 1, backgroundColor: BG }} />;
-  if (!hasSession) return (
-    <AuthGate
-      title="The Archive"
-      message="Your saved analyses live here for up to 90 days. Create a free account to save and revisit any report."
-    />
-  );
-
-  return <ArchiveContent />;
-}
-
-function ArchiveContent() {
   const { analyses, loaded, reload, remove } = useAnalysisArchive();
 
   // Reload every time the tab is focused (catches saves from other screens)

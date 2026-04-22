@@ -27,7 +27,6 @@ import type { TickerInfo, AssetType } from '@/data/tickerSearch';
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
 import { BG, S1, LINE, W, GOLD, G1, G2, SERIF } from '@/theme';
-import { AuthGate } from '@/components/AuthGate';
 const ERR = '#F87171';
 
 // Single source of truth - badge bg/text and chart slice color all come from here.
@@ -441,26 +440,6 @@ function holdingToRow(h: Holding, userId: string) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function VaultScreen() {
-  const [hasSession, setHasSession] = useState<boolean | null>(null);
-
-  useFocusEffect(useCallback(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setHasSession(!!session);
-    });
-  }, []));
-
-  if (hasSession === null) return <View style={{ flex: 1, backgroundColor: BG }} />;
-  if (!hasSession) return (
-    <AuthGate
-      title="The Vault"
-      message="Track your holdings, see your allocation, and watch live prices update. Create a free account to get started."
-    />
-  );
-
-  return <VaultContent />;
-}
-
-function VaultContent() {
   const { authState, authenticate, lock } = useVaultAuth();
   const [holdings,      setHoldings]      = useState<Holding[]>([]);
   const [cash,          setCash]          = useState<CashData>({ amount: '', currency: 'USD', allocation: '' });
