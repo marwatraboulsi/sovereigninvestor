@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import type { MacroConviction } from '@/types';
 
 import { BG, S1, S2, LINE, W, GOLD, G1, G2, SERIF, BODY } from '@/theme';
+import { AuthGate } from '@/components/AuthGate';
 
 const LEVEL_LABEL:     Record<string, string> = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
 const STATUS_LABEL:    Record<string, string> = { 'currently-invested': 'Currently invested', 'planning-to-start': 'Planning to start', 'just-exploring': 'Just exploring' };
@@ -89,6 +90,26 @@ const MACRO_CONVICTIONS: { id: MacroConviction; label: string; description: stri
 ];
 
 export default function ProfileScreen() {
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setHasSession(!!session);
+    });
+  }, []));
+
+  if (hasSession === null) return <View style={{ flex: 1, backgroundColor: BG }} />;
+  if (!hasSession) return (
+    <AuthGate
+      title="Your Profile"
+      message="Set your investment mandate once and the entire app personalises around it. Create a free account to get started."
+    />
+  );
+
+  return <ProfileContent />;
+}
+
+function ProfileContent() {
   const { profile, saveProfile, clearProfile } = useUserProfile();
   const [convictions, setConvictions]   = useState<MacroConviction[]>([]);
   const [note, setNote]                 = useState('');
@@ -123,6 +144,30 @@ export default function ProfileScreen() {
       await saveProfile({ ...profile, worldviewNote: note });
       setNoteDirty(false);
     }
+  }
+
+  async function handleDeleteAccount() {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.rpc('delete_user_account');
+              if (error) throw error;
+              await supabase.auth.signOut();
+              router.replace('/auth');
+            } catch (err: any) {
+              Alert.alert('Error', err.message ?? 'Failed to delete account. Please contact support.');
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function confirmReset() {
@@ -310,6 +355,14 @@ export default function ProfileScreen() {
           <Text style={s.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={s.deleteAccountBtn}
+          activeOpacity={0.7}
+          onPress={handleDeleteAccount}
+        >
+          <Text style={s.deleteAccountText}>Delete Account</Text>
+        </TouchableOpacity>
+
         <Text style={s.disclaimer}>Sovereign Investor · Educational content only · Not investment advice</Text>
       </ScrollView>
     </SafeAreaView>
@@ -422,5 +475,9 @@ const s = StyleSheet.create({
 
   signOutBtn:  { alignItems: 'center', paddingVertical: 4 },
   signOutText: { fontSize: 13, color: '#E05555' },
+
+  deleteAccountBtn:  { alignItems: 'center', paddingVertical: 4 },
+  deleteAccountText: { fontSize: 13, color: G2, textDecorationLine: 'underline' },
+
   disclaimer: { fontSize: 11, color: G2, textAlign: 'center', lineHeight: 16 },
 });

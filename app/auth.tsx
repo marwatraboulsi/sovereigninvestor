@@ -257,6 +257,14 @@ export default function AuthScreen() {
                   : 'Back to sign in'}
               </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.guestBtn}
+              onPress={() => router.replace('/(tabs)/chat')}
+              disabled={loading}
+            >
+              <Text style={s.guestBtnText}>Explore without an account</Text>
+            </TouchableOpacity>
           </View>
 
         </View>
@@ -355,4 +363,7 @@ const s = StyleSheet.create({
 
   toggle:     { alignItems: 'center', paddingVertical: 8 },
   toggleText: { color: G2, fontSize: 14, fontFamily: BODY },
+
+  guestBtn:     { alignItems: 'center', paddingVertical: 4 },
+  guestBtnText: { color: G3, fontSize: 13, fontFamily: BODY, textDecorationLine: 'underline' },
 });
