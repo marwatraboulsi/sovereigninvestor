@@ -3,24 +3,30 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { useGuest } from '@/contexts/GuestContext';
 import { BG } from '@/theme';
 
 export default function IndexScreen() {
   const { profile, loading } = useUserProfile();
+  const { isGuest } = useGuest();
 
   useEffect(() => {
     if (loading) return;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
-        router.replace('/auth');
+        if (isGuest) {
+          router.replace('/(tabs)/chat');
+        } else {
+          router.replace('/auth');
+        }
       } else if (profile?.onboardingComplete) {
         router.replace('/(tabs)/chat');
       } else {
         router.replace('/welcome');
       }
     });
-  }, [loading, profile]);
+  }, [loading, profile, isGuest]);
 
   return (
     <View style={styles.container}>

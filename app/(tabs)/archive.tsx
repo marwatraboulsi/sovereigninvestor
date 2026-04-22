@@ -10,9 +10,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useFocusEffect } from 'expo-router';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useAnalysisArchive } from '@/hooks/useAnalysisArchive';
 import type { SavedAnalysis } from '@/types';
+import { useGuest } from '@/contexts/GuestContext';
+import { AccountModal } from '@/components/AccountModal';
 
 import { BG, S1, LINE, W, G1, G2, SERIF, BODY } from '@/theme';
 
@@ -45,10 +47,12 @@ function daysUntilExpiry(expiresAt: number): number {
 }
 
 export default function ArchiveScreen() {
+  const { isGuest } = useGuest();
+  const [showAccountModal, setShowAccountModal] = useState(false);
   const { analyses, loaded, reload, remove } = useAnalysisArchive();
 
   // Reload every time the tab is focused (catches saves from other screens)
-  useFocusEffect(useCallback(() => { reload(); }, [reload]));
+  useFocusEffect(useCallback(() => { if (!isGuest) reload(); }, [isGuest, reload]));
 
   const handleDelete = (item: SavedAnalysis) => {
     Alert.alert(
@@ -67,6 +71,13 @@ export default function ArchiveScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      <AccountModal
+        visible={showAccountModal}
+        onClose={() => setShowAccountModal(false)}
+        title="Save Your Analyses"
+        message="Create a free account to save research reports and come back to them for up to 90 days."
+      />
+
       <View style={s.header}>
         <Text style={s.headerTitle}>Archive</Text>
         <Text style={s.headerSub}>Your saved analyses live here. Come back to any report, whenever you need it, for up to 90 days.</Text>
@@ -77,7 +88,20 @@ export default function ArchiveScreen() {
         contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
       >
-        {loaded && analyses.length === 0 && (
+        {isGuest && (
+          <View style={s.empty}>
+            <Ionicons name="albums-outline" size={40} color={G2} />
+            <Text style={s.emptyTitle}>Your analyses will live here</Text>
+            <Text style={s.emptyBody}>
+              Create an account to save research reports and revisit them for up to 90 days.
+            </Text>
+            <TouchableOpacity style={s.emptyBtn} onPress={() => setShowAccountModal(true)} activeOpacity={0.8}>
+              <Text style={s.emptyBtnText}>Create Account</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!isGuest && loaded && analyses.length === 0 && (
           <View style={s.empty}>
             <Ionicons name="albums-outline" size={40} color={G2} />
             <Text style={s.emptyTitle}>No saved analyses yet</Text>
@@ -88,7 +112,7 @@ export default function ArchiveScreen() {
           </View>
         )}
 
-        {analyses.map((item) => {
+        {!isGuest && analyses.map((item) => {
           const accent = SKILL_ACCENT[item.skillId] ?? W;
           const bg     = SKILL_BG[item.skillId]     ?? S1;
           const expiry = daysUntilExpiry(item.expiresAt);
@@ -159,6 +183,8 @@ const s = StyleSheet.create({
   },
   emptyTitle: { fontSize: 17, fontWeight: '600', color: G1, marginTop: 8 },
   emptyBody:  { fontSize: 14, color: G2, textAlign: 'center', lineHeight: 20, fontFamily: BODY },
+  emptyBtn:     { marginTop: 8, backgroundColor: '#c9a84c', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  emptyBtnText: { color: '#0d1f1b', fontSize: 14, fontWeight: '700' },
 
   card: {
     backgroundColor: S1,

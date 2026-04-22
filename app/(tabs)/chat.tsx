@@ -17,6 +17,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import Markdown from 'react-native-markdown-display';
 import { router, useFocusEffect } from 'expo-router';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { useGuest } from '@/contexts/GuestContext';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
 import { useConversation, consumePendingConversation } from '@/hooks/useConversation';
 import { streamClaude, loadFundManagerContext, retrieveKnowledgeChunks } from '@/api/claudeClient';
@@ -48,6 +49,7 @@ const TOOLS = [
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
+  const { isGuest }                         = useGuest();
   const { profile }                         = useUserProfile();
   const { loadConversation, loadConversationById, startNewConversation, saveMessage } = useConversation();
   const [messages, setMessages]             = useState<Message[]>([]);
@@ -93,6 +95,17 @@ export default function ChatScreen() {
     onResult: (text) => setInput((prev) => (prev ? prev + ' ' + text : text)),
   });
 
+  // Guest: clear messages every time the tab is focused (fresh session)
+  useFocusEffect(useCallback(() => {
+    if (isGuest) {
+      setMessages([]);
+      setStreaming('');
+      setIsStreaming(false);
+      setError(null);
+      setHistoryLoading(false);
+    }
+  }, [isGuest]));
+
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages, streamingText]);
@@ -110,8 +123,8 @@ export default function ChatScreen() {
     setMessages(next);
     setIsStreaming(true);
 
-    // Persist user message immediately
-    saveMessage(userMsg);
+    // Persist user message immediately (skip for guests)
+    if (!isGuest) saveMessage(userMsg);
 
     // Retrieve relevant knowledge chunks before streaming (falls back silently)
     const chunks = await retrieveKnowledgeChunks(trimmed);
@@ -132,8 +145,8 @@ export default function ChatScreen() {
           setIsStreaming(false);
           const assistantMsg: Message = { role: 'assistant', content, suggestions };
           setMessages((p) => [...p, assistantMsg]);
-          // Persist assistant message
-          saveMessage(assistantMsg);
+          // Persist assistant message (skip for guests)
+          if (!isGuest) saveMessage(assistantMsg);
         },
         onError:  (err) => {
           setStreaming('');
@@ -142,7 +155,7 @@ export default function ChatScreen() {
         },
       },
     );
-  }, [messages, isStreaming, profile, fmContext, saveMessage]);
+  }, [messages, isStreaming, profile, fmContext, saveMessage, isGuest]);
 
   const reset = () => {
     abortRef.current?.();
@@ -151,7 +164,7 @@ export default function ChatScreen() {
     setIsStreaming(false);
     setError(null);
     setToolsOpen(false);
-    startNewConversation();
+    if (!isGuest) startNewConversation();
   };
 
   const isEmpty     = messages.length === 0 && !isStreaming;
@@ -182,14 +195,25 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
+      {/* Guest banner */}
+      {isGuest && (
+        <View style={s.guestBanner}>
+          <Text style={s.guestBannerText}>
+            You're exploring as a guest. Your conversation won't be saved.
+          </Text>
+        </View>
+      )}
+
       {/* Header */}
       <View style={s.header}>
         <View style={s.headerRow}>
           <Text style={s.headerTitle}>Your Fund Guide</Text>
           <View style={s.headerActions}>
-            <TouchableOpacity onPress={() => router.push('/conversations')} activeOpacity={0.6} style={s.headerIconBtn}>
-              <Ionicons name="time-outline" size={20} color={G1} />
-            </TouchableOpacity>
+            {!isGuest && (
+              <TouchableOpacity onPress={() => router.push('/conversations')} activeOpacity={0.6} style={s.headerIconBtn}>
+                <Ionicons name="time-outline" size={20} color={G1} />
+              </TouchableOpacity>
+            )}
             {hasMessages && (
               <TouchableOpacity onPress={reset} activeOpacity={0.6}>
                 <Text style={s.headerAction}>New chat</Text>
@@ -446,6 +470,16 @@ const s = StyleSheet.create({
   scrollEmpty:   { flex: 1 },
 
   historyLoading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
+  guestBanner: {
+    backgroundColor: '#1a2e28',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#2a4038',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  guestBannerText: { fontSize: 12, color: G2, fontFamily: BODY, textAlign: 'center' },
 
   // Empty state
   empty:         { flex: 1, paddingTop: 12 },

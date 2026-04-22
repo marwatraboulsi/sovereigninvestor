@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { Lora_400Regular, Lora_600SemiBold, Lora_700Bold } from '@expo-google-fonts/lora';
 import { Spectral_400Regular, Spectral_500Medium, Spectral_600SemiBold } from '@expo-google-fonts/spectral';
 import { supabase } from '@/lib/supabase';
+import { GuestProvider, useGuest } from '@/contexts/GuestContext';
 import { BG, W } from '@/theme';
 
 export default function RootLayout() {
@@ -18,20 +19,28 @@ export default function RootLayout() {
     Spectral_600SemiBold,
   });
 
-  // Listen for Supabase PASSWORD_RECOVERY event (deep link from reset email)
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        router.push('/reset-password');
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Hold splash until fonts are ready - avoids font flash
   if (!fontsLoaded) {
     return <View style={{ flex: 1, backgroundColor: BG }} />;
   }
+
+  return (
+    <GuestProvider>
+      <RootLayoutInner />
+    </GuestProvider>
+  );
+}
+
+function RootLayoutInner() {
+  const { setIsGuest } = useGuest();
+
+  // Clear guest mode on sign-in; handle password recovery deep link
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') setIsGuest(false);
+      if (event === 'PASSWORD_RECOVERY') router.push('/reset-password');
+    });
+    return () => subscription.unsubscribe();
+  }, [setIsGuest]);
 
   return (
     <>
@@ -45,17 +54,15 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: BG },
         }}
       >
-        {/* These screens manage their own headers / chrome */}
-        <Stack.Screen name="(tabs)"     options={{ headerShown: false, title: '' }} />
-        <Stack.Screen name="index"      options={{ headerShown: false }} />
-        <Stack.Screen name="auth"       options={{ headerShown: false }} />
-        <Stack.Screen name="privacy"       options={{ headerShown: true }} />
-        <Stack.Screen name="contact"       options={{ headerShown: true }} />
+        <Stack.Screen name="(tabs)"         options={{ headerShown: false, title: '' }} />
+        <Stack.Screen name="index"          options={{ headerShown: false }} />
+        <Stack.Screen name="auth"           options={{ headerShown: false }} />
+        <Stack.Screen name="privacy"        options={{ headerShown: true }} />
+        <Stack.Screen name="contact"        options={{ headerShown: true }} />
         <Stack.Screen name="conversations"  options={{ headerShown: true }} />
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />
-        <Stack.Screen name="welcome"    options={{ headerShown: false }} />
-        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-        {/* skill/[id] uses Stack.Screen internally to set its own title */}
+        <Stack.Screen name="welcome"        options={{ headerShown: false }} />
+        <Stack.Screen name="onboarding"     options={{ headerShown: false }} />
       </Stack>
     </>
   );

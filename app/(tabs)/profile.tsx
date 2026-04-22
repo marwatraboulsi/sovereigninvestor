@@ -7,6 +7,8 @@ import { supabase } from '@/lib/supabase';
 import type { MacroConviction } from '@/types';
 
 import { BG, S1, S2, LINE, W, GOLD, G1, G2, SERIF, BODY } from '@/theme';
+import { useGuest } from '@/contexts/GuestContext';
+import { AccountModal } from '@/components/AccountModal';
 
 const LEVEL_LABEL:     Record<string, string> = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: 'Advanced' };
 const STATUS_LABEL:    Record<string, string> = { 'currently-invested': 'Currently invested', 'planning-to-start': 'Planning to start', 'just-exploring': 'Just exploring' };
@@ -89,6 +91,30 @@ const MACRO_CONVICTIONS: { id: MacroConviction; label: string; description: stri
 ];
 
 export default function ProfileScreen() {
+  const { isGuest } = useGuest();
+  const [showAccountModal, setShowAccountModal] = useState(false);
+
+  // Show sign-up modal immediately when a guest visits Profile
+  useFocusEffect(useCallback(() => {
+    if (isGuest) setShowAccountModal(true);
+  }, [isGuest]));
+
+  if (isGuest) {
+    return (
+      <SafeAreaView style={s.safe}>
+        <AccountModal
+          visible={showAccountModal}
+          onClose={() => setShowAccountModal(false)}
+          title="Your Profile"
+          message="Create a free account to set your investment mandate and personalise every response you receive."
+        />
+        <View style={s.center}>
+          <Text style={s.centerText}>Create an account to access your profile.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const { profile, saveProfile, clearProfile } = useUserProfile();
   const [convictions, setConvictions]   = useState<MacroConviction[]>([]);
   const [note, setNote]                 = useState('');

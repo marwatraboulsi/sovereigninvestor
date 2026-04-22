@@ -2,6 +2,9 @@ import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useState } from 'react';
+import { useGuest } from '@/contexts/GuestContext';
+import { AccountModal } from '@/components/AccountModal';
 
 import { BG, LINE, W, G1, G2, SERIF, BODY } from '@/theme';
 
@@ -33,8 +36,18 @@ const SKILLS = [
 ];
 
 export default function SkillsScreen() {
+  const { isGuest } = useGuest();
+  const [showModal, setShowModal] = useState(false);
+
   return (
     <SafeAreaView style={s.safe}>
+      <AccountModal
+        visible={showModal}
+        onClose={() => setShowModal(false)}
+        title="Research Tools"
+        message="Create a free account to access Portfolio Reviewer, Catalyst Scanner, ETF Analyzer, and more."
+      />
+
       <View style={s.header}>
         <Text style={s.headerTitle}>Research</Text>
         <Text style={s.headerSub}>Pick a tool and tell me what you want to analyse. I'll run a deep, structured research session tailored to your question.</Text>
@@ -46,7 +59,7 @@ export default function SkillsScreen() {
             <TouchableOpacity
               key={skill.id}
               style={[s.item, i < SKILLS.length - 1 && s.itemBorder]}
-              onPress={() => router.push(`/skill/${skill.id}`)}
+              onPress={() => isGuest ? setShowModal(true) : router.push(`/skill/${skill.id}`)}
               activeOpacity={0.5}
             >
               <View style={s.itemBody}>
@@ -54,7 +67,7 @@ export default function SkillsScreen() {
                 <Text style={s.itemDesc}>{skill.description}</Text>
                 <Text style={s.itemDetail}>{skill.detail}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color={G2} />
+              <Ionicons name={isGuest ? 'lock-closed-outline' : 'chevron-forward'} size={16} color={G2} />
             </TouchableOpacity>
           ))}
         </View>

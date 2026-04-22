@@ -9,8 +9,9 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useState } from 'react';
-import { router } from 'expo-router';
+import { useState, useEffect } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useGuest } from '@/contexts/GuestContext';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { FontAwesome } from '@expo/vector-icons';
@@ -24,7 +25,17 @@ GoogleSignin.configure({
 });
 
 export default function AuthScreen() {
-  const [mode, setMode]         = useState<'login' | 'signup' | 'forgot'>('login');
+  const { initialMode } = useLocalSearchParams<{ initialMode?: string }>();
+  const { setIsGuest }  = useGuest();
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(
+    initialMode === 'signup' ? 'signup' : 'login'
+  );
+
+  // Keep mode in sync if params change (e.g. pushed from AccountModal)
+  useEffect(() => {
+    if (initialMode === 'signup') setMode('signup');
+    else if (initialMode === 'login') setMode('login');
+  }, [initialMode]);
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
@@ -257,6 +268,14 @@ export default function AuthScreen() {
                   : 'Back to sign in'}
               </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={s.guestBtn}
+              onPress={() => { setIsGuest(true); router.replace('/(tabs)/chat'); }}
+              disabled={loading}
+            >
+              <Text style={s.guestBtnText}>Explore without an account</Text>
+            </TouchableOpacity>
           </View>
 
         </View>
@@ -355,4 +374,7 @@ const s = StyleSheet.create({
 
   toggle:     { alignItems: 'center', paddingVertical: 8 },
   toggleText: { color: G2, fontSize: 14, fontFamily: BODY },
+
+  guestBtn:     { alignItems: 'center', paddingVertical: 4 },
+  guestBtnText: { color: G3, fontSize: 13, fontFamily: BODY, textDecorationLine: 'underline' },
 });

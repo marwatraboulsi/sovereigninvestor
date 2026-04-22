@@ -27,6 +27,8 @@ import type { TickerInfo, AssetType } from '@/data/tickerSearch';
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
 import { BG, S1, LINE, W, GOLD, G1, G2, SERIF } from '@/theme';
+import { useGuest } from '@/contexts/GuestContext';
+import { AccountModal } from '@/components/AccountModal';
 const ERR = '#F87171';
 
 // Single source of truth - badge bg/text and chart slice color all come from here.
@@ -440,6 +442,8 @@ function holdingToRow(h: Holding, userId: string) {
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function VaultScreen() {
+  const { isGuest } = useGuest();
+  const [showAccountModal, setShowAccountModal] = useState(false);
   const { authState, authenticate, lock } = useVaultAuth();
   const [holdings,      setHoldings]      = useState<Holding[]>([]);
   const [cash,          setCash]          = useState<CashData>({ amount: '', currency: 'USD', allocation: '' });
@@ -655,7 +659,7 @@ export default function VaultScreen() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  if (authState === 'locked') {
+  if (!isGuest && authState === 'locked') {
     return (
       <SafeAreaView style={s.safe}>
         <LockScreen onUnlock={authenticate} />
@@ -665,6 +669,13 @@ export default function VaultScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      <AccountModal
+        visible={showAccountModal}
+        onClose={() => setShowAccountModal(false)}
+        title="Save Your Portfolio"
+        message="Create a free account to save your holdings and access them every time you open the app."
+      />
+
       <KeyboardAvoidingView
         style={s.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -674,12 +685,27 @@ export default function VaultScreen() {
         <View style={s.header}>
           <View style={s.headerRow}>
             <Text style={s.headerTitle}>The Vault</Text>
-            <TouchableOpacity style={s.saveBtn} onPress={handleSave} activeOpacity={0.8}>
-              <Text style={s.saveBtnText}>{saved ? 'Saved' : 'Save'}</Text>
+            <TouchableOpacity
+              style={s.saveBtn}
+              onPress={isGuest ? () => setShowAccountModal(true) : handleSave}
+              activeOpacity={0.8}
+            >
+              <Text style={s.saveBtnText}>
+                {isGuest ? 'Sign up to save' : (saved ? 'Saved' : 'Save')}
+              </Text>
             </TouchableOpacity>
           </View>
           <Text style={s.headerSub}>Add your holdings here and I'll keep track of everything. Your portfolio, your way.</Text>
         </View>
+
+        {/* Guest banner */}
+        {isGuest && (
+          <View style={s.guestBanner}>
+            <Text style={s.guestBannerText}>
+              You're exploring as a guest. Your holdings won't be saved.
+            </Text>
+          </View>
+        )}
         {holdings.length > 0 && (
           <View style={s.liveBar}>
             <Ionicons name="pulse-outline" size={13} color='#10B981' />
@@ -844,6 +870,16 @@ const s = StyleSheet.create({
   headerSub:   { fontSize: 14, color: G1, marginTop: 4, lineHeight: 20, fontFamily: 'Spectral_400Regular' },
   saveBtn:     { backgroundColor: GOLD, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
   saveBtnText: { color: BG, fontSize: 14, fontWeight: '600' },
+
+  guestBanner: {
+    backgroundColor: '#1a2e28',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#2a4038',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  guestBannerText: { fontSize: 12, color: G2, fontFamily: 'Spectral_400Regular', textAlign: 'center' },
 
   liveBar:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
   liveBarText: { flex: 1, color: '#10B981', fontSize: 12 },
