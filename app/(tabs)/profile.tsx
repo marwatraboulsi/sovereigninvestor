@@ -125,6 +125,30 @@ export default function ProfileScreen() {
     }
   }
 
+  async function handleDeleteAccount() {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.rpc('delete_user_account');
+              if (error) throw error;
+              await supabase.auth.signOut();
+              router.replace('/auth');
+            } catch (err: any) {
+              Alert.alert('Error', err.message ?? 'Failed to delete account. Please contact support.');
+            }
+          },
+        },
+      ]
+    );
+  }
+
   async function confirmReset() {
     Alert.alert(
       'Reset profile',
@@ -310,6 +334,10 @@ export default function ProfileScreen() {
           <Text style={s.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={s.deleteAccountBtn} activeOpacity={0.7} onPress={handleDeleteAccount}>
+          <Text style={s.deleteAccountText}>Delete Account</Text>
+        </TouchableOpacity>
+
         <Text style={s.disclaimer}>Sovereign Investor · Educational content only · Not investment advice</Text>
       </ScrollView>
     </SafeAreaView>
@@ -422,5 +450,7 @@ const s = StyleSheet.create({
 
   signOutBtn:  { alignItems: 'center', paddingVertical: 4 },
   signOutText: { fontSize: 13, color: '#E05555' },
+  deleteAccountBtn:  { alignItems: 'center', paddingVertical: 4 },
+  deleteAccountText: { fontSize: 12, color: G2, textDecorationLine: 'underline' },
   disclaimer: { fontSize: 11, color: G2, textAlign: 'center', lineHeight: 16 },
 });
