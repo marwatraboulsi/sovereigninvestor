@@ -102,6 +102,17 @@ create policy "Users view own snapshots"
     )
   );
 
+create policy "Users insert own snapshots"
+  on price_snapshots
+  for insert
+  with check (
+    exists (
+      select 1 from decision_logs
+      where decision_logs.id = price_snapshots.decision_log_id
+        and decision_logs.user_id = auth.uid()
+    )
+  );
+
 
 -- ─── 4. convictions ───────────────────────────────────────────────────────────
 -- One row per (user, theme) — enforced by unique constraint.
