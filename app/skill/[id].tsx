@@ -37,10 +37,12 @@ function isValidSkillId(id: string): id is SkillId {
   return VALID_SKILL_IDS.includes(id as SkillId);
 }
 
+// ─── Outer component ──────────────────────────────────────────────────────────
+// Validates the route param BEFORE any hooks are called.
+// React requires hooks to be called the same number of times on every render,
+// so we must never call hooks before a conditional return.
 export default function SkillScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const scrollRef = useRef<ScrollView>(null);
-  const [input, setInput] = useState('');
 
   if (!id || !isValidSkillId(id)) {
     return (
@@ -49,6 +51,16 @@ export default function SkillScreen() {
       </View>
     );
   }
+
+  return <SkillScreenInner id={id} />;
+}
+
+// ─── Inner component ──────────────────────────────────────────────────────────
+// Only rendered when `id` is a valid SkillId. All hooks live here so they are
+// called unconditionally on every render of this component.
+function SkillScreenInner({ id }: { id: SkillId }) {
+  const scrollRef = useRef<ScrollView>(null);
+  const [input, setInput] = useState('');
 
   const skill     = SKILL_METADATA[id];
   const vaultData = useVaultData();

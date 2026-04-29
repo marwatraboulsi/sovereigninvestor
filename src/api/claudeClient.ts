@@ -141,9 +141,12 @@ export async function loadFundManagerContext(): Promise<FundManagerContext> {
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 
+// max_uses: 8 caps web searches to one per research phase, keeping response
+// times predictable on mobile and preventing runaway multi-search loops.
 const WEB_SEARCH_TOOL = {
   type: 'web_search_20260209',
   name: 'web_search',
+  max_uses: 8,
 } as const;
 
 function getApiKey(): string {
@@ -375,12 +378,20 @@ export interface StreamCallbacks {
  * Streams a response from Claude using XMLHttpRequest.
  * XHR is the only reliable way to stream in React Native / Hermes.
  * Returns an abort function - call it to cancel the request.
+ *
+ * Timeout strategy:
+ *   - We use a manual setTimeout instead of xhr.timeout because xhr.timeout
+ *     is unreliable for long-lived streaming connections in React Native —
+ *     the underlying iOS/Android network stack may honour a shorter OS-level
+ *     timeout regardless of what JavaScript sets.
+ *   - A stall detector fires if no HTTP progress is received for 60 seconds
+ *     (covers silent connection drops on mobile, e.g. during web searches).
  */
 export function streamClaude(
   options: ClaudeRequestOptions,
   callbacks: StreamCallbacks,
 ): () => void {
-  const { body, model } = buildRequestBody(options, true);
+  const { body } = buildRequestBody(options, true);
   const apiKey = getApiKey();
   const timeoutMs = options.timeoutMs ?? 120_000;
 
@@ -389,10 +400,43 @@ export function streamClaude(
   xhr.setRequestHeader('Content-Type', 'application/json');
   xhr.setRequestHeader('x-api-key', apiKey);
   xhr.setRequestHeader('anthropic-version', API_VERSION);
-  xhr.timeout = timeoutMs;
+  // Do NOT set xhr.timeout — use the manual hard timeout below instead.
 
   let processedLength = 0;
   let fullText = '';
+  let settled = false; // prevents double-firing callbacks after abort
+
+  // ─── Hard timeout (replaces xhr.timeout) ─────────────────────────────────
+  const hardTimeoutId = setTimeout(() => {
+    if (!settled) {
+      settled = true;
+      cleanup();
+      xhr.abort();
+      callbacks.onError(new Error('Request timed out. Please try again.'));
+    }
+  }, timeoutMs);
+
+  // ─── Stall detector ───────────────────────────────────────────────────────
+  // If the connection silently drops (common on mobile during long web searches),
+  // neither onerror nor ontimeout may fire. We detect this by tracking how long
+  // it has been since the last onprogress event.
+  let lastProgressMs = Date.now();
+  let hasReceivedFirstByte = false;
+  const stallIntervalId = setInterval(() => {
+    if (hasReceivedFirstByte && Date.now() - lastProgressMs > 60_000) {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        xhr.abort();
+        callbacks.onError(new Error('Connection lost. Please check your network and try again.'));
+      }
+    }
+  }, 10_000);
+
+  function cleanup() {
+    clearTimeout(hardTimeoutId);
+    clearInterval(stallIntervalId);
+  }
 
   // Parse SSE lines from each incoming chunk
   function processChunk(chunk: string) {
@@ -417,22 +461,26 @@ export function streamClaude(
     }
   }
 
-  // onprogress fires as chunks arrive
+  // onprogress fires as chunks arrive (including tool_use events during web search)
   xhr.onprogress = () => {
+    hasReceivedFirstByte = true;
+    lastProgressMs = Date.now();
     const newChunk = xhr.responseText.slice(processedLength);
     processedLength = xhr.responseText.length;
     if (newChunk) processChunk(newChunk);
   };
 
   xhr.onload = () => {
+    cleanup();
+    if (settled) return;
+    settled = true;
+
     // Catch any remaining bytes
     const remaining = xhr.responseText.slice(processedLength);
     if (remaining) processChunk(remaining);
 
     if (xhr.status >= 400) {
-      callbacks.onError(
-        new ClaudeAPIError(xhr.status, xhr.responseText),
-      );
+      callbacks.onError(new ClaudeAPIError(xhr.status, xhr.responseText));
       return;
     }
 
@@ -440,13 +488,37 @@ export function streamClaude(
     callbacks.onDone(content, suggestions);
   };
 
-  xhr.onerror = () => callbacks.onError(new Error('Network error. Please check your connection.'));
-  xhr.ontimeout = () => callbacks.onError(new Error('Request timed out. Please try again.'));
-  xhr.onabort = () => { /* silently cancelled */ };
+  xhr.onerror = () => {
+    cleanup();
+    if (!settled) {
+      settled = true;
+      callbacks.onError(new Error('Network error. Please check your connection.'));
+    }
+  };
+
+  xhr.ontimeout = () => {
+    cleanup();
+    if (!settled) {
+      settled = true;
+      callbacks.onError(new Error('Request timed out. Please try again.'));
+    }
+  };
+
+  xhr.onabort = () => {
+    cleanup();
+    // silently cancelled — settled flag prevents double callbacks
+  };
 
   xhr.send(JSON.stringify(body));
 
-  return () => xhr.abort();
+  // Return abort function so callers (e.g. clearSession) can cancel in-flight requests
+  return () => {
+    if (!settled) {
+      settled = true;
+      cleanup();
+      xhr.abort();
+    }
+  };
 }
 
 // ─── Non-streaming API call (kept for skill screens) ─────────────────────────

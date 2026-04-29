@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Message, SkillId } from '@/types';
 import { streamClaude, ClaudeAPIError } from '@/api/claudeClient';
 import { getCachedEtfAnalysis, setCachedEtfAnalysis, extractTicker } from '@/cache/etfCache';
@@ -39,6 +39,9 @@ function setSession(skill: SkillId, updater: (s: SessionState) => SessionState):
 export function useSkillSession(skill: SkillId) {
   // Initialise from module store so navigating back restores the session
   const [state, setStateInternal] = useState<SessionState>(() => getSession(skill));
+
+  // Holds the abort function for any in-flight XHR so we can cancel it cleanly
+  const abortRef = useRef<(() => void) | null>(null);
 
   // Wrapper that syncs both React state and the module store
   const setState = useCallback(
@@ -91,7 +94,10 @@ export function useSkillSession(skill: SkillId) {
       startStream(updatedMessages, timeoutMs, null);
 
       function startStream(msgs: Message[], timeout: number, etfTicker: string | null) {
-        streamClaude(
+        // Cancel any previous in-flight request before starting a new one
+        abortRef.current?.();
+
+        const abort = streamClaude(
           { skill, messages: msgs, timeoutMs: timeout },
           {
             onChunk: (text) => {
@@ -100,6 +106,7 @@ export function useSkillSession(skill: SkillId) {
               setStateInternal(next);
             },
             onDone: (content) => {
+              abortRef.current = null;
               if (etfTicker && content.length > 100) {
                 setCachedEtfAnalysis(etfTicker, content).catch(() => {});
               }
@@ -112,6 +119,7 @@ export function useSkillSession(skill: SkillId) {
               setStateInternal(next);
             },
             onError: (err) => {
+              abortRef.current = null;
               let errorMessage = 'Something went wrong. Please try again.';
               if (err instanceof ClaudeAPIError) {
                 if (err.isAuthError) {
@@ -134,12 +142,17 @@ export function useSkillSession(skill: SkillId) {
             },
           },
         );
+
+        abortRef.current = abort;
       }
     },
     [skill, setState],
   );
 
   const clearSession = useCallback(() => {
+    // Cancel any in-flight request so stale callbacks don't overwrite the cleared state
+    abortRef.current?.();
+    abortRef.current = null;
     skillSessions.delete(skill);
     setStateInternal(EMPTY_STATE);
   }, [skill]);
