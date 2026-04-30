@@ -1,12 +1,15 @@
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { usePlaybook } from '@/hooks/usePlaybook';
+import { useConvictions } from '@/hooks/useConvictions';
 import { supabase } from '@/lib/supabase';
-import type { MacroConviction, PlaybookRule, RuleCategory } from '@/types';
+import type { MacroConviction, PlaybookRule, RuleCategory, Conviction, ConvictionBelief, ConvictionConfidence } from '@/types';
 import { seedPlaybookOnFirstLogin } from '@/utils/seedPlaybookOnFirstLogin';
+import { CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
 import { RuleWizard } from '@/components/RuleWizard';
 
 import { BG, S1, S2, LINE, W, GOLD, G1, G2, SERIF, BODY } from '@/theme';
@@ -120,6 +123,13 @@ export default function ProfileScreen() {
 
   const { profile, saveProfile, clearProfile } = useUserProfile();
   const { rules, loaded: rulesLoaded, reload: reloadRules, addRule, updateRule, pauseRule, removeRule } = usePlaybook();
+  const { convictions: convictionRecords, loaded: convictionsLoaded, reload: reloadConvictions, setConviction, removeConviction } = useConvictions();
+
+  // ── Conviction edit state ───────────────────────────────────────────────────
+  const [editingConviction,  setEditingConviction]  = useState<Conviction | null>(null);
+  const [editBelief,         setEditBelief]         = useState<ConvictionBelief>('yes');
+  const [editConfidence,     setEditConfidence]     = useState<ConvictionConfidence>('medium');
+  const [editNote,           setEditNote]           = useState('');
 
   const [convictions, setConvictions]   = useState<MacroConviction[]>([]);
   const [note, setNote]                 = useState('');
@@ -142,7 +152,8 @@ export default function ProfileScreen() {
       setNoteDirty(false);
     }
     reloadRules();
-  }, [profile, reloadRules]));
+    reloadConvictions(profile); // triggers Phase 8B migration on first load
+  }, [profile, reloadRules, reloadConvictions]));
 
   useEffect(() => {
     if (profile?.onboardingComplete && rulesLoaded && rules.length === 0 && !seedAttempted.current) {
@@ -273,6 +284,52 @@ export default function ProfileScreen() {
     }
   }
 
+  // ─── Conviction helpers ────────────────────────────────────────────────────
+
+  function handleConvictionTap(conviction: Conviction) {
+    Alert.alert(
+      CONVICTION_THEME_LABEL[conviction.theme],
+      undefined,
+      [
+        {
+          text: 'Edit',
+          onPress: () => {
+            setEditBelief(conviction.belief);
+            setEditConfidence(conviction.confidence);
+            setEditNote(conviction.note ?? '');
+            setEditingConviction(conviction);
+          },
+        },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert(
+              'Remove conviction',
+              `Remove your conviction about "${CONVICTION_THEME_LABEL[conviction.theme]}"?`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Remove', style: 'destructive', onPress: () => removeConviction(conviction.id) },
+              ],
+            ),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }
+
+  async function handleConvictionSave() {
+    if (!editingConviction) return;
+    await setConviction(
+      editingConviction.theme,
+      editBelief,
+      editConfidence,
+      editNote.trim() || undefined,
+      'manual',
+    );
+    setEditingConviction(null);
+  }
+
   async function handleDeleteAccount() {
     Alert.alert(
       'Delete Account',
@@ -341,6 +398,86 @@ export default function ProfileScreen() {
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+
+        {/* ── Conviction edit modal ── */}
+        <Modal
+          visible={editingConviction !== null}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setEditingConviction(null)}
+        >
+          <Pressable style={s.modalOverlay} onPress={() => setEditingConviction(null)}>
+            <Pressable style={s.modalSheet} onPress={() => {}}>
+              <Text style={s.modalTitle}>
+                {editingConviction ? CONVICTION_THEME_LABEL[editingConviction.theme] : ''}
+              </Text>
+
+              {/* Belief */}
+              <Text style={s.convEditSectionLabel}>Do you believe this?</Text>
+              <View style={s.convEditRow}>
+                {(['yes', 'still-forming', 'no'] as ConvictionBelief[]).map((b) => (
+                  <TouchableOpacity
+                    key={b}
+                    style={[s.convEditBtn, editBelief === b && s.convEditBtnActive]}
+                    onPress={() => setEditBelief(b)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.convEditBtnText, editBelief === b && s.convEditBtnTextActive]}>
+                      {b === 'yes' ? 'Yes' : b === 'no' ? 'No' : 'Still forming'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Confidence */}
+              <Text style={[s.convEditSectionLabel, { marginTop: 16 }]}>How confident?</Text>
+              <View style={s.convEditRow}>
+                {(['low', 'medium', 'high'] as ConvictionConfidence[]).map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[s.convEditBtn, editConfidence === c && s.convEditBtnActive]}
+                    onPress={() => setEditConfidence(c)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.convEditBtnText, editConfidence === c && s.convEditBtnTextActive]}>
+                      {c.charAt(0).toUpperCase() + c.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Note */}
+              <Text style={[s.convEditSectionLabel, { marginTop: 16 }]}>Note (optional)</Text>
+              <TextInput
+                style={s.convEditNote}
+                value={editNote}
+                onChangeText={setEditNote}
+                placeholder="Why do you hold this view?"
+                placeholderTextColor={G2}
+                multiline
+                numberOfLines={3}
+              />
+
+              {/* Actions */}
+              <View style={s.convEditActions}>
+                <TouchableOpacity
+                  style={s.convEditCancel}
+                  onPress={() => setEditingConviction(null)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={s.convEditCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={s.convEditSave}
+                  onPress={handleConvictionSave}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.convEditSaveText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
 
         {/* Field picker modal */}
         <Modal
@@ -525,6 +662,55 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* ── Convictions ──────────────────────────────────────────────────── */}
+        <View style={s.section}>
+          <Text style={s.sectionLabel}>Convictions</Text>
+          <Text style={s.sectionSub}>
+            Your macro beliefs, built up through Research, Learn Mode, and the Intercept. Tap any conviction to edit or remove it.
+          </Text>
+
+          {convictionsLoaded && convictionRecords.length === 0 ? (
+            <View style={s.playbookEmpty}>
+              <Text style={s.playbookEmptyText}>
+                Your convictions will build here as you use the app — through Research, Learn Mode, and the Intercept.
+              </Text>
+            </View>
+          ) : (
+            (['yes', 'still-forming', 'no'] as ConvictionBelief[]).map((belief) => {
+              const group = convictionRecords.filter((c) => c.belief === belief);
+              if (group.length === 0) return null;
+              const groupLabel = belief === 'yes' ? 'I believe this' : belief === 'no' ? 'I don\'t believe this' : 'Still thinking';
+              return (
+                <View key={belief} style={s.playbookGroup}>
+                  <Text style={s.playbookGroupLabel}>{groupLabel}</Text>
+                  {group.map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={s.convRecordCard}
+                      onPress={() => handleConvictionTap(c)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={s.convRecordTop}>
+                        <View style={[s.beliefDot, belief === 'yes' ? s.beliefDotGreen : belief === 'no' ? s.beliefDotRed : s.beliefDotAmber]} />
+                        <Text style={s.convRecordLabel} numberOfLines={1}>
+                          {CONVICTION_THEME_LABEL[c.theme]}
+                        </Text>
+                        <View style={[s.confBadge, c.confidence === 'high' ? s.confBadgeHigh : c.confidence === 'low' ? s.confBadgeLow : s.confBadgeMed]}>
+                          <Text style={s.confBadgeText}>{c.confidence}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={14} color={G2} />
+                      </View>
+                      {c.note ? (
+                        <Text style={s.convRecordNote} numberOfLines={2}>{c.note}</Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              );
+            })
+          )}
+        </View>
+
         {/* ── Footer links ─────────────────────────────────────────────────── */}
         <View style={s.footerLinks}>
           <TouchableOpacity onPress={() => router.push('/privacy')} activeOpacity={0.6}>
@@ -698,6 +884,40 @@ const s = StyleSheet.create({
 
   pausedBadge:     { backgroundColor: '#3D2F00', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
   pausedBadgeText: { fontSize: 10, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.3 },
+
+  // ── Conviction edit modal ─────────────────────────────────────────────────
+  convEditSectionLabel: { fontSize: 12, color: G2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 },
+  convEditRow:   { flexDirection: 'row', gap: 8 },
+  convEditBtn:   { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, alignItems: 'center', backgroundColor: 'transparent' },
+  convEditBtnActive:     { backgroundColor: GOLD + '22', borderColor: GOLD },
+  convEditBtnText:       { fontSize: 14, color: G1 },
+  convEditBtnTextActive: { color: GOLD, fontWeight: '600' },
+  convEditNote:  { backgroundColor: BG, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, padding: 12, color: W, fontSize: 14, fontFamily: BODY, minHeight: 70, textAlignVertical: 'top' },
+  convEditActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  convEditCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, alignItems: 'center' },
+  convEditCancelText: { fontSize: 15, color: G1 },
+  convEditSave:  { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: GOLD, alignItems: 'center' },
+  convEditSaveText: { fontSize: 15, fontWeight: '700', color: BG },
+
+  // ── Conviction record cards ───────────────────────────────────────────────
+  convRecordCard: {
+    backgroundColor: S1, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE,
+    padding: 14, gap: 6,
+  },
+  convRecordTop:  { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  convRecordLabel:{ flex: 1, fontSize: 14, fontWeight: '600', color: W },
+  convRecordNote: { fontSize: 12, color: G2, fontFamily: BODY, lineHeight: 17 },
+
+  beliefDot:       { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  beliefDotGreen:  { backgroundColor: '#34D399' },
+  beliefDotAmber:  { backgroundColor: '#F59E0B' },
+  beliefDotRed:    { backgroundColor: '#9CA3AF' },
+
+  confBadge:     { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 },
+  confBadgeHigh: { backgroundColor: GOLD + '30' },
+  confBadgeMed:  { backgroundColor: S2 },
+  confBadgeLow:  { backgroundColor: 'transparent', borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
+  confBadgeText: { fontSize: 10, fontWeight: '700', color: G2, textTransform: 'uppercase', letterSpacing: 0.4 },
 
   // ─────────────────────────────────────────────────────────────────────────
   footerLinks:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },

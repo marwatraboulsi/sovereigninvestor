@@ -17,12 +17,14 @@ import { useSkillSession } from '@/hooks/useSkillSession';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
 import { useVaultData, formatPortfolioForReview } from '@/hooks/useVaultData';
 import { useSlideGeneration } from '@/hooks/useSlideGeneration';
+import { useConvictions } from '@/hooks/useConvictions';
 import { saveAnalysisToArchive } from '@/hooks/useAnalysisArchive';
 import { SKILL_METADATA } from '@/skills';
 import { MessageBubble } from '@/components/MessageBubble';
 import { SkillOptionPicker } from '@/components/SkillOptionPicker';
 import { parseSkillMessage } from '@/utils/parseSkillOptions';
-import type { SkillId } from '@/types';
+import { detectThemeFromText, CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
+import type { SkillId, ConvictionTheme, ConvictionBelief } from '@/types';
 
 import { BG, S1, LINE, W, GOLD, G1, G2 } from '@/theme';
 
@@ -70,9 +72,12 @@ function SkillScreenInner({ id }: { id: SkillId }) {
     onResult: (text) => setInput((prev) => (prev ? prev + ' ' + text : text)),
   });
   const { isGenerating, generate: generateSlides } = useSlideGeneration();
-  const [slideSaved, setSlideSaved] = useState(false);
-  const [slideError, setSlideError] = useState<string | null>(null);
-  const [showToast, setShowToast] = useState(false);
+  const { convictions, setConviction } = useConvictions();
+  const [slideSaved,          setSlideSaved]          = useState(false);
+  const [slideError,          setSlideError]          = useState<string | null>(null);
+  const [showToast,           setShowToast]           = useState(false);
+  // Conviction prompt — fires once per session for the first detected theme
+  const [convictionResponded, setConvictionResponded] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wasLoading = useRef(false);
 
@@ -243,6 +248,51 @@ function SkillScreenInner({ id }: { id: SkillId }) {
                     {isGenerating ? 'Generating slides…' : 'Save as Slides'}
                   </Text>
                 </TouchableOpacity>
+              </View>
+            );
+          })()}
+
+          {/* Conviction prompt — Catalyst Scanner only, once per session */}
+          {(() => {
+            if (id !== 'market-catalyst-scanner') return null;
+            if (convictionResponded) return null;
+            const last = messages[messages.length - 1];
+            if (!last || last.role !== 'assistant' || isLoading || last.content.length < 200) return null;
+            const detectedTheme: ConvictionTheme | null = detectThemeFromText(last.content);
+            if (!detectedTheme) return null;
+            // Skip if user already has a conviction for this theme
+            if (convictions.some((c) => c.theme === detectedTheme)) return null;
+
+            const themeLabel = CONVICTION_THEME_LABEL[detectedTheme];
+
+            const respond = async (belief: ConvictionBelief) => {
+              setConvictionResponded(true);
+              await setConviction(detectedTheme, belief, 'medium', undefined, 'catalyst-scanner');
+            };
+
+            return (
+              <View style={styles.convictionPromptCard}>
+                <View style={styles.convictionPromptHeader}>
+                  <Ionicons name="bulb-outline" size={14} color={GOLD} />
+                  <Text style={styles.convictionPromptLabel}>Based on what you've read</Text>
+                </View>
+                <Text style={styles.convictionPromptQuestion}>
+                  Do you believe in <Text style={styles.convictionPromptTheme}>{themeLabel}</Text>?
+                </Text>
+                <View style={styles.convictionPromptButtons}>
+                  {(['yes', 'still-forming', 'no'] as ConvictionBelief[]).map((b) => (
+                    <TouchableOpacity
+                      key={b}
+                      style={styles.convictionPromptBtn}
+                      onPress={() => respond(b)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.convictionPromptBtnText}>
+                        {b === 'yes' ? 'Yes' : b === 'no' ? 'No' : 'Still forming'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
             );
           })()}
@@ -449,4 +499,54 @@ const styles = StyleSheet.create({
   },
   slidesSavedText: { color: '#10B981', fontSize: 13, fontWeight: '500' },
   slideErrorText:  { color: '#F87171', fontSize: 12 },
+
+  // ── Conviction prompt (Catalyst Scanner) ──────────────────────────────────
+  convictionPromptCard: {
+    backgroundColor: GOLD + '12',
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: GOLD + '44',
+    padding: 16,
+    gap: 10,
+    marginTop: 4,
+  },
+  convictionPromptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  convictionPromptLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: GOLD,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  convictionPromptQuestion: {
+    fontSize: 15,
+    color: '#CBD5E1',
+    lineHeight: 22,
+  },
+  convictionPromptTheme: {
+    color: '#F1F5F9',
+    fontWeight: '600',
+  },
+  convictionPromptButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  convictionPromptBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: S1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LINE,
+    alignItems: 'center',
+  },
+  convictionPromptBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#CBD5E1',
+  },
 });

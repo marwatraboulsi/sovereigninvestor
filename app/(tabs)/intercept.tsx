@@ -43,6 +43,9 @@ import { useUserProfile } from '@/hooks/useUserProfile';
 import { useVaultData } from '@/hooks/useVaultData';
 import { useLivePrices } from '@/hooks/useLivePrices';
 import { deriveTopicFromTicker } from '@/skills/learnMode';
+import { useConvictions } from '@/hooks/useConvictions';
+import { tickerToConvictionTheme, CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
+import type { Conviction } from '@/types';
 import type { TickerInfo } from '@/data/tickerSearch';
 import type {
   InterceptSession,
@@ -220,13 +223,15 @@ function InterceptWizard() {
   const { rules, reload: reloadRules, addRule, matchRules } = usePlaybook();
   const { addLog, logs, loaded: decisionsLoaded, reload: reloadDecisionLog } = useDecisionLog();
   const { profile } = useUserProfile();
+  const { convictions, reload: reloadConvictions } = useConvictions();
   const vaultData   = useVaultData();
 
-  // Reload playbook + decision log when tab comes into focus
+  // Reload playbook + decision log + convictions when tab comes into focus
   useFocusEffect(useCallback(() => {
     reloadRules();
     reloadDecisionLog();
-  }, [reloadRules, reloadDecisionLog]));
+    reloadConvictions();
+  }, [reloadRules, reloadDecisionLog, reloadConvictions]));
 
   // Live price for the selected ticker
   const priceItems = useMemo(
@@ -634,6 +639,7 @@ function InterceptWizard() {
           vaultHolding={vaultHolding}
           livePrice={livePrice}
           liveCurrency={liveCurrency}
+          convictions={convictions}
           onNext={advanceToStep4}
           onTalkItThrough={handleTalkItThrough}
           onLearnFirst={handleLearnFirst}
@@ -830,6 +836,7 @@ interface Step3Props {
   vaultHolding:   any | null;
   livePrice:      number | null;
   liveCurrency:   string;
+  convictions:    Conviction[];
   onNext:         () => void;
   onTalkItThrough:() => void;
   onLearnFirst:   () => void;
@@ -838,9 +845,18 @@ interface Step3Props {
 
 function Step3({
   session, checkingRules, vaultHolding, livePrice, liveCurrency,
-  onNext, onTalkItThrough, onLearnFirst, onProceedNow,
+  convictions, onNext, onTalkItThrough, onLearnFirst, onProceedNow,
 }: Step3Props) {
   const { rulesMatched, playbookGapDetected } = session;
+
+  // Check for a relevant conviction (belief=yes or still-forming) for this asset
+  const relevantConviction = useMemo(() => {
+    const theme = tickerToConvictionTheme(session.ticker, session.assetName);
+    if (!theme) return null;
+    return convictions.find(
+      (c) => c.theme === theme && (c.belief === 'yes' || c.belief === 'still-forming'),
+    ) ?? null;
+  }, [convictions, session.ticker, session.assetName]);
 
   if (checkingRules) {
     return (
@@ -920,6 +936,21 @@ function Step3({
               >
                 <Text style={s.decideNowBtnText}>Decide now</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Conviction reflection card — shown when user holds a relevant worldview */}
+        {relevantConviction && (
+          <View style={s.convictionRefCard}>
+            <Ionicons name="bulb-outline" size={16} color={GOLD} />
+            <View style={s.convictionRefBody}>
+              <Text style={s.convictionRefTitle}>Your worldview</Text>
+              <Text style={s.convictionRefText}>
+                You{relevantConviction.belief === 'still-forming' ? ' may believe' : ' believe'} in{' '}
+                <Text style={s.convictionRefBold}>{CONVICTION_THEME_LABEL[relevantConviction.theme]}</Text>.
+                {' '}Is this decision consistent with that?
+              </Text>
             </View>
           </View>
         )}
@@ -1507,6 +1538,22 @@ const s = StyleSheet.create({
 
   talkLink:     { alignSelf: 'center', paddingVertical: 6 },
   talkLinkText: { fontSize: 13, color: G2, textDecorationLine: 'underline', fontFamily: BODY },
+
+  // ── Conviction reflection card (Step 3) ───────────────────────────────────
+  convictionRefCard: {
+    flexDirection:   'row',
+    gap:             10,
+    backgroundColor: GOLD + '12',
+    borderRadius:    12,
+    borderWidth:     StyleSheet.hairlineWidth,
+    borderColor:     GOLD + '44',
+    padding:         14,
+    alignItems:      'flex-start',
+  },
+  convictionRefBody:  { flex: 1, gap: 3 },
+  convictionRefTitle: { fontSize: 10, fontWeight: '700', color: GOLD, textTransform: 'uppercase', letterSpacing: 0.8 },
+  convictionRefText:  { fontSize: 13, color: G1, fontFamily: BODY, lineHeight: 19 },
+  convictionRefBold:  { color: W, fontWeight: '600' },
 
   // ── Step 4: verdict ───────────────────────────────────────────────────────
   verdictCard: {
