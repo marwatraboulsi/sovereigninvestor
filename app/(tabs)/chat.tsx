@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import Markdown from 'react-native-markdown-display';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useGuest } from '@/contexts/GuestContext';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
@@ -64,6 +64,12 @@ export default function ChatScreen() {
   const scrollRef                           = useRef<ScrollView>(null);
   const abortRef                            = useRef<(() => void) | null>(null);
 
+  // ── Intercept seed (4E) ────────────────────────────────────────────────────
+  // When the user taps "Talk it through" in the Intercept wizard, the chat tab
+  // receives a `seed` param and auto-sends it as the opening message.
+  const { seed } = useLocalSearchParams<{ seed?: string }>();
+  const lastSeedRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
     loadFundManagerContext().then(setFmContext).catch(() => {});
     AsyncStorage.getItem('privacy_notice_seen').then((seen) => {
@@ -74,6 +80,15 @@ export default function ChatScreen() {
       setHistoryLoading(false);
     }).catch(() => setHistoryLoading(false));
   }, []);
+
+  // Auto-send seed message from Intercept "Talk it through" (4E)
+  useEffect(() => {
+    if (!seed || seed === lastSeedRef.current) return;
+    if (historyLoading || isStreaming) return;
+    lastSeedRef.current = seed;
+    send(seed);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed, historyLoading]);
 
   // Pick up conversation switches from the browser
   useFocusEffect(useCallback(() => {
