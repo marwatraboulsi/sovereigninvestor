@@ -1,8 +1,12 @@
 /**
- * useDecisionLog — full implementation (Phase 4C)
+ * useDecisionLog — full implementation (Phase 4C / 5A)
  *
  * Reads and writes to the `decision_logs` and `price_snapshots` tables.
- * addLog() inserts the decision record + a day-0 price snapshot atomically.
+ * addLog()      — inserts the decision record + a day-0 price snapshot.
+ * getOutcome()  — queries stored snapshots for the best available P&L data.
+ *                 Returns null when only the day-0 snapshot exists (no outcome
+ *                 yet), since comparing day-0 to itself is meaningless.
+ *                 The detail screen supplements this with a live price fetch.
  */
 
 import { useState, useCallback } from 'react';
@@ -118,5 +122,50 @@ export function useDecisionLog() {
     }
   }, []);
 
-  return { logs, loaded, reload, addLog };
+  // ─── Outcome ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Fetches the most recent stored price snapshot with days_from_decision > 0
+   * for a given log. Returns structured P&L data, or null if no post-decision
+   * snapshot exists yet (only the day-0 record is present).
+   */
+  const getOutcome = useCallback(async (
+    logId: string,
+    priceAtDecision: number,
+  ): Promise<{
+    priceAtDecision: number;
+    currentPrice:    number;
+    pnl:             number;
+    pnlPct:          number;
+    daysFromDecision:number;
+  } | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('price_snapshots')
+        .select('price, days_from_decision')
+        .eq('decision_log_id', logId)
+        .gt('days_from_decision', 0)          // exclude the day-0 baseline
+        .order('days_from_decision', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error || !data) return null;
+
+      const currentPrice    = Number(data.price);
+      const pnl             = currentPrice - priceAtDecision;
+      const pnlPct          = priceAtDecision > 0 ? (pnl / priceAtDecision) * 100 : 0;
+
+      return {
+        priceAtDecision,
+        currentPrice,
+        pnl,
+        pnlPct,
+        daysFromDecision: data.days_from_decision,
+      };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  return { logs, loaded, reload, addLog, getOutcome };
 }
