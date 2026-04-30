@@ -39,6 +39,7 @@ import { TickerSearch } from '@/components/TickerSearch';
 import { RuleWizard } from '@/components/RuleWizard';
 import { usePlaybook } from '@/hooks/usePlaybook';
 import { useDecisionLog } from '@/hooks/useDecisionLog';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { useVaultData } from '@/hooks/useVaultData';
 import { useLivePrices } from '@/hooks/useLivePrices';
 import type { TickerInfo } from '@/data/tickerSearch';
@@ -211,15 +212,20 @@ function InterceptWizard() {
   // Prevent multiple seed attempts
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Tracks whether the completed session was the user's very first log
+  const isFirstLogRef = useRef(false);
+
   // ── Data hooks ─────────────────────────────────────────────────────────────
   const { rules, reload: reloadRules, addRule, matchRules } = usePlaybook();
-  const { addLog }   = useDecisionLog();
-  const vaultData    = useVaultData();
+  const { addLog, logs, loaded: decisionsLoaded, reload: reloadDecisionLog } = useDecisionLog();
+  const { profile } = useUserProfile();
+  const vaultData   = useVaultData();
 
-  // Reload playbook when tab comes into focus
+  // Reload playbook + decision log when tab comes into focus
   useFocusEffect(useCallback(() => {
     reloadRules();
-  }, [reloadRules]));
+    reloadDecisionLog();
+  }, [reloadRules, reloadDecisionLog]));
 
   // Live price for the selected ticker
   const priceItems = useMemo(
@@ -327,6 +333,10 @@ function InterceptWizard() {
     overrideReason_?: string,
     tradeExecuted_?: boolean,
   ) {
+    // Capture first-log status before the write so we can prompt after success.
+    // decisionsLoaded ensures we have a reliable count (not an optimistic 0).
+    isFirstLogRef.current = decisionsLoaded && logs.length === 0;
+
     setLogging(true);
     const id = await addLog({
       ticker:            session.ticker,
@@ -347,11 +357,16 @@ function InterceptWizard() {
 
   async function handleFollowPlaybook() {
     await logAndShowSuccess('follow-playbook');
-    successTimerRef.current = setTimeout(() => {
-      setShowSuccess(false);
-      // No gap (rules matched) — just reset after success
-      resetWizard();
-    }, 2500);
+    // Skip auto-dismiss on the first completed session so the user can tap
+    // "Done" and reach the extended-profile prompt.
+    const needsExtendedProfile = isFirstLogRef.current && !profile?.ageRange;
+    if (!needsExtendedProfile) {
+      successTimerRef.current = setTimeout(() => {
+        setShowSuccess(false);
+        // No gap (rules matched) — just reset after success
+        resetWizard();
+      }, 2500);
+    }
   }
 
   function handleOverride() {
@@ -381,6 +396,37 @@ function InterceptWizard() {
   function handleSuccessDone() {
     if (successTimerRef.current) clearTimeout(successTimerRef.current);
     setShowSuccess(false);
+
+    // After the user's very first completed Intercept, nudge them to finish
+    // their profile — but only if the extended questions haven't been answered yet.
+    if (isFirstLogRef.current && !profile?.ageRange) {
+      Alert.alert(
+        'Want to sharpen your profile?',
+        'It takes 2 minutes. Four quick questions help personalise every future session.',
+        [
+          {
+            text: 'Let\'s do it',
+            onPress: () => {
+              resetWizard();
+              router.push('/extended-profile');
+            },
+          },
+          {
+            text: 'Maybe later',
+            style: 'cancel',
+            onPress: () => {
+              if (session.playbookGapDetected) {
+                showGapPrompt();
+              } else {
+                resetWizard();
+              }
+            },
+          },
+        ],
+      );
+      return;
+    }
+
     if (session.playbookGapDetected) {
       showGapPrompt();
     } else {
