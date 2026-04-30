@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useGuest } from '@/contexts/GuestContext';
 import { AccountModal } from '@/components/AccountModal';
 
-import { BG, LINE, W, G1, G2, SERIF, BODY } from '@/theme';
+import { BG, LINE, W, G1, G2, GOLD, SERIF, BODY } from '@/theme';
 
 const SKILLS = [
   {
@@ -49,7 +49,12 @@ export default function SkillsScreen() {
       />
 
       <View style={s.header}>
-        <Text style={s.headerTitle}>Research</Text>
+        <View style={s.headerRow}>
+          <Text style={s.headerTitle}>Research</Text>
+          <TouchableOpacity onPress={() => router.push('/saved-research')} activeOpacity={0.6}>
+            <Text style={s.savedBtn}>Saved Research</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={s.headerSub}>Pick a tool and tell me what you want to analyse. I'll run a deep, structured research session tailored to your question.</Text>
       </View>
 
@@ -92,7 +97,13 @@ const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: LINE,
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   headerTitle: { fontSize: 28, fontWeight: '700', color: W, letterSpacing: -0.5, fontFamily: SERIF },
+  savedBtn:    { fontSize: 13, color: G2 },
   headerSub:   { fontSize: 14, color: G1, marginTop: 4, lineHeight: 20, fontFamily: BODY },
 
   scroll:  { flex: 1 },

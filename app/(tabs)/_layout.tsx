@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router';
+import { StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BG, GOLD } from '@/theme';
 
@@ -25,6 +26,7 @@ export default function TabLayout() {
         },
       }}
     >
+      {/* 1 — Guide */}
       <Tabs.Screen
         name="chat"
         options={{
@@ -38,6 +40,8 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* 2 — Research */}
       <Tabs.Screen
         name="skills"
         options={{
@@ -51,6 +55,23 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* 3 — Intercept (central, slightly larger icon to signal primacy) */}
+      <Tabs.Screen
+        name="intercept"
+        options={{
+          title: 'Intercept',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'shield-checkmark' : 'shield-checkmark-outline'}
+              size={26}
+              color={color}
+            />
+          ),
+        }}
+      />
+
+      {/* 4 — The Vault */}
       <Tabs.Screen
         name="vault"
         options={{
@@ -64,19 +85,23 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* 5 — Decisions */}
       <Tabs.Screen
-        name="archive"
+        name="decisions"
         options={{
-          title: 'Archive',
+          title: 'Decisions',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'albums' : 'albums-outline'}
+              name={focused ? 'journal' : 'journal-outline'}
               size={22}
               color={color}
             />
           ),
         }}
       />
+
+      {/* 6 — Profile */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -90,8 +115,14 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* Archive — hidden from tab bar but route still works for existing slides links */}
+      <Tabs.Screen
+        name="archive"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
-
-import { StyleSheet } from 'react-native';

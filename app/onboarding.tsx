@@ -108,7 +108,7 @@ export default function OnboardingScreen() {
       responseStyle:      answers['style']     as ResponseStyle,
       onboardingComplete: true,
     });
-    router.replace('/(tabs)/chat');
+    router.replace('/(tabs)/intercept');
   }
 
   return (
