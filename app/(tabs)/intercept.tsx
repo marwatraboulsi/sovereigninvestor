@@ -389,14 +389,17 @@ function InterceptWizard() {
     const verdict = session.rulesMatched.length > 0 ? 'conscious-proceed' : 'no-rules-matched';
     await logAndShowSuccess(verdict, overrideReason.trim(), tradeExecuted);
 
-    if (!session.playbookGapDetected) {
+    // Skip auto-dismiss on the user's first session so they can tap "Done"
+    // and reach the extended-profile prompt (same gate as handleFollowPlaybook).
+    const needsExtendedProfile = isFirstLogRef.current && !profile?.ageRange;
+    if (!needsExtendedProfile && !session.playbookGapDetected) {
       // Rules existed but user overrode — auto-reset after success
       successTimerRef.current = setTimeout(() => {
         setShowSuccess(false);
         resetWizard();
       }, 2500);
     }
-    // If gap detected, success state shows gap prompt link — user must tap
+    // If gap detected, or first-log extended profile pending, user must tap Done
   }
 
   function handleSuccessDone() {
@@ -534,10 +537,7 @@ function InterceptWizard() {
         visible={ruleWizardVisible}
         onClose={() => { setRuleWizardVisible(false); resetWizard(); }}
         onSave={handleRuleWizardSave}
-        existingRule={ruleWizardCategory
-          ? { category: ruleWizardCategory } as any
-          : undefined
-        }
+        preselectedCategory={ruleWizardCategory}
       />
 
       {/* ── Conscious Proceed sheet ── */}

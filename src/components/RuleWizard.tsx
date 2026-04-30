@@ -45,31 +45,41 @@ interface RuleWizardProps {
   visible: boolean;
   onClose: () => void;
   onSave:  (rule: Partial<PlaybookRule>) => void;
-  existingRule?: PlaybookRule;
+  existingRule?:        PlaybookRule;
+  /** Pre-selects a category and opens directly at step 2 (title + body entry).
+   *  Used by the gap-rule prompt in the Intercept wizard. Replaces the previous
+   *  `existingRule={{ category } as any}` pattern. */
+  preselectedCategory?: RuleCategory;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function RuleWizard({ visible, onClose, onSave, existingRule }: RuleWizardProps) {
+export function RuleWizard({ visible, onClose, onSave, existingRule, preselectedCategory }: RuleWizardProps) {
   const [step,     setStep]     = useState<1 | 2>(1);
   const [category, setCategory] = useState<RuleCategory | null>(null);
   const [title,    setTitle]    = useState('');
   const [body,     setBody]     = useState('');
 
-  // Pre-fill when editing an existing rule
+  // Pre-fill when editing an existing rule, or jump to step 2 with a preselected category
   useEffect(() => {
     if (visible && existingRule) {
       setCategory(existingRule.category);
       setTitle(existingRule.title);
       setBody(existingRule.body);
-      setStep(existingRule ? 2 : 1);
-    } else if (visible && !existingRule) {
+      setStep(2);
+    } else if (visible && preselectedCategory) {
+      // Gap-rule prompt: category already known, skip straight to body entry
+      setCategory(preselectedCategory);
+      setTitle('');
+      setBody('');
+      setStep(2);
+    } else if (visible) {
       setCategory(null);
       setTitle('');
       setBody('');
       setStep(1);
     }
-  }, [visible, existingRule]);
+  }, [visible, existingRule, preselectedCategory]);
 
   function handleClose() {
     onClose();

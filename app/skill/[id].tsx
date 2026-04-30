@@ -267,7 +267,10 @@ function SkillScreenInner({ id }: { id: SkillId }) {
 
             const respond = async (belief: ConvictionBelief) => {
               setConvictionResponded(true);
-              await setConviction(detectedTheme, belief, 'medium', undefined, 'catalyst-scanner');
+              // 'no' → low confidence (user actively disbelieves, not uncertain)
+              // 'still-forming' / 'yes' → medium confidence
+              const confidence = belief === 'no' ? 'low' : 'medium';
+              await setConviction(detectedTheme, belief, confidence, undefined, 'catalyst-scanner');
             };
 
             return (

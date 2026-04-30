@@ -71,6 +71,10 @@ export default function LearnModeScreen() {
   const abortRef         = useRef<(() => void) | null>(null);
   const systemPromptRef  = useRef<string>('');
   const hasAutoSentRef   = useRef(false);
+  // Stores the auto-sent opening message so it can be prepended to every API
+  // call for context — but it is never added to the visible `messages` state,
+  // avoiding the odd "user bubble" that reads like educator-voice text.
+  const openingMsgRef    = useRef<string>('');
 
   // ── Auto-scroll ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -92,9 +96,15 @@ export default function LearnModeScreen() {
     setMessages(next);
     setIsStreaming(true);
 
+    // Prepend the hidden opening message so Claude always has the full
+    // conversation history, even though it isn't shown in the UI.
+    const apiMessages: Message[] = openingMsgRef.current
+      ? [{ role: 'user', content: openingMsgRef.current }, ...next]
+      : next;
+
     abortRef.current = streamClaude(
       {
-        messages:             next,
+        messages:             apiMessages,
         userProfile:          profile ?? undefined,
         systemPromptOverride: systemPromptRef.current,
       },
@@ -137,14 +147,19 @@ export default function LearnModeScreen() {
 
       systemPromptRef.current = systemPrompt;
 
+      // Store the opening message in a ref — it will be prepended to every
+      // API call for context, but never added to `messages` (the visible state).
+      // This prevents it from rendering as an odd user-voice bubble in the UI.
+      openingMsgRef.current = openingMessage;
+
       // Inject RAG knowledge into context (same pattern as chat.tsx)
       const enrichedCtx = chunks ? { ...(ctx as any), knowledgeChunks: chunks } : ctx;
 
       setIsStreaming(false); // loading done; now actually stream
 
-      // Auto-send the opening message
+      // Auto-send the opening message to the API; leave messages[] empty
+      // so the conversation appears to start with the educator's first response.
       const openingUserMsg: Message = { role: 'user', content: openingMessage };
-      setMessages([openingUserMsg]);
       setIsStreaming(true);
 
       abortRef.current = streamClaude(
@@ -159,7 +174,8 @@ export default function LearnModeScreen() {
           onDone:  (content) => {
             setStreaming('');
             setIsStreaming(false);
-            setMessages((p) => [...p, { role: 'assistant', content }]);
+            // Displayed conversation starts here — no preceding user bubble
+            setMessages([{ role: 'assistant', content }]);
           },
           onError: (err) => {
             setStreaming('');
