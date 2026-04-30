@@ -585,6 +585,7 @@ export async function callClaudeRaw(
   systemPrompt: string,
   userMessage: string,
   timeoutMs = 60_000,
+  model: string = MODELS.portfolioAnalysis,
 ): Promise<string> {
   const apiKey = getApiKey();
   const controller = new AbortController();
@@ -600,7 +601,7 @@ export async function callClaudeRaw(
         'anthropic-version': API_VERSION,
       },
       body: JSON.stringify({
-        model: MODELS.portfolioAnalysis,
+        model,
         max_tokens: 4096,
         stream: false,
         system: systemPrompt,

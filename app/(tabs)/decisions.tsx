@@ -20,9 +20,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useDecisionLog } from '@/hooks/useDecisionLog';
+import { snapshotOutcomes } from '@/utils/snapshotOutcomes';
 import { useGuest } from '@/contexts/GuestContext';
 import { AccountModal } from '@/components/AccountModal';
 import type { DecisionLog, DecisionTrigger, DecisionType, VerdictType } from '@/types';
@@ -96,12 +97,26 @@ function mostCommonTrigger(logs: DecisionLog[]): DecisionTrigger | null {
 export default function DecisionsScreen() {
   const { isGuest } = useGuest();
   const [showAccountModal, setShowAccountModal] = useState(false);
-  const { logs, loaded, reload } = useDecisionLog();
+  const { logs, loaded, reload, getPlaybookValidated } = useDecisionLog();
+  const [validatedCount, setValidatedCount] = useState(0);
+  const [with30d,        setWith30d]        = useState(0);
 
   useFocusEffect(useCallback(() => {
     if (isGuest) { setShowAccountModal(true); return; }
     reload();
   }, [isGuest, reload]));
+
+  // ── Part B: snapshot milestones whenever log list is fresh ─────────────────
+  // ── Part D: compute "Playbook validated" count ─────────────────────────────
+  useEffect(() => {
+    if (!loaded || logs.length === 0) return;
+    snapshotOutcomes(logs); // fire-and-forget; idempotent
+    getPlaybookValidated(logs).then(({ validatedCount: vc, with30d: w }) => {
+      setValidatedCount(vc);
+      setWith30d(w);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, logs.length]);
 
   // ── Guest state ────────────────────────────────────────────────────────────
   if (isGuest) {
@@ -171,6 +186,16 @@ export default function DecisionsScreen() {
               </Text>
               <Text style={s.summaryLabel}>Top trigger</Text>
             </View>
+            {/* 4th stat: only when ≥3 decisions have a 30-day snapshot */}
+            {with30d >= 3 && (
+              <>
+                <View style={s.summaryDivider} />
+                <View style={s.summaryStat}>
+                  <Text style={s.summaryValue}>{validatedCount}</Text>
+                  <Text style={s.summaryLabel}>Playbook{'\n'}validated</Text>
+                </View>
+              </>
+            )}
           </View>
         )}
 

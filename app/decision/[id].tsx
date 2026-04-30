@@ -1,17 +1,19 @@
 /**
- * Decision Detail Screen — Phase 5C
+ * Decision Detail Screen — Phase 9C / 9E
  *
- * Full session recap for a single decision log entry.
+ * Upgrades from Phase 5C:
+ *   · Timeline row  — milestone snapshots (7 / 30 / 60 / 90 days) + live price
+ *   · Days tracked  — label showing how long this decision has been monitored
+ *   · Stable narrative — outcomeNarrative prefers the most recent milestone
+ *                        snapshot over the volatile live price
+ *   · Haiku framing — one-line AI reflection sentence (gated on 30d+ snapshot)
  *
  * Sections:
  *   · Header   — ticker, asset name, date, decision type badge
  *   · Feelings — emotional triggers identified
  *   · Playbook — rules that matched (full text) or "no rule matched"
  *   · Decision — verdict, override reason, trade executed flag
- *   · Outcome  — price at decision vs current live price, P&L
- *
- * Live price is fetched via useLivePrices so the outcome is always fresh.
- * Counterfactual language adapts to verdict + actual P&L direction.
+ *   · Outcome  — timeline, P&L, narrative, Haiku framing
  */
 
 import {
@@ -25,12 +27,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useDecisionLog } from '@/hooks/useDecisionLog';
 import { useLivePrices } from '@/hooks/useLivePrices';
 import { usePlaybook } from '@/hooks/usePlaybook';
-import type { DecisionLog, DecisionTrigger, DecisionType, VerdictType } from '@/types';
+import { callClaudeRaw } from '@/api/claudeClient';
+import { MODELS } from '@/api/modelRouter';
+import { supabase } from '@/lib/supabase';
+import type { DecisionLog, DecisionTrigger, DecisionType } from '@/types';
 
 import { BG, S1, S2, LINE, W, GOLD, G1, G2, SERIF, BODY } from '@/theme';
 
@@ -57,11 +62,11 @@ const DECISION_LABEL: Record<DecisionType, string> = {
 };
 
 const DT_BADGE: Record<DecisionType, { bg: string; text: string }> = {
-  buy:   { bg: '#0A2018', text: '#34D399' },
-  sell:  { bg: '#280D0D', text: '#F87171' },
-  hold:  { bg: '#0E1C2A', text: '#60A5FA' },
-  wait:  { bg: '#0E1C2A', text: '#60A5FA' },
-  unsure:{ bg: '#1E1A0E', text: '#FCD34D' },
+  buy:    { bg: '#0A2018', text: '#34D399' },
+  sell:   { bg: '#280D0D', text: '#F87171' },
+  hold:   { bg: '#0E1C2A', text: '#60A5FA' },
+  wait:   { bg: '#0E1C2A', text: '#60A5FA' },
+  unsure: { bg: '#1E1A0E', text: '#FCD34D' },
 };
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -91,46 +96,49 @@ function formatDate(ts: number): string {
   });
 }
 
+function daysSince(ts: number): number {
+  return Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
+}
+
 function pnlSign(n: number): string { return n >= 0 ? '+' : ''; }
 
 /**
- * Generates counterfactual or direct outcome language depending on verdict
- * and whether the price went up or down since the decision.
+ * Generates counterfactual or direct outcome language.
+ * Prefers `latestMilestone` (a stored snapshot) over the live price for
+ * stability — the narrative uses a definitive data point, not a real-time quote.
  */
 function outcomeNarrative(
   log: DecisionLog,
-  currentPrice: number,
+  referencePrice: number,
+  latestMilestone?: { milestone: number; price: number },
 ): string {
-  const pnlPct      = ((currentPrice - log.priceAtDecision) / log.priceAtDecision) * 100;
-  const priceUp     = currentPrice >= log.priceAtDecision;
+  const pnlPct  = ((referencePrice - log.priceAtDecision) / log.priceAtDecision) * 100;
+  const priceUp = referencePrice >= log.priceAtDecision;
+  const atMark  = latestMilestone ? ` at the ${latestMilestone.milestone}-day mark` : '';
 
   if (log.verdict === 'follow-playbook') {
-    // User followed the playbook (did NOT make the trade)
     if (log.decisionType === 'sell') {
-      // Held instead of selling
       return priceUp
-        ? `By not selling, you held through a ${fmt(pnlPct, 1)}% gain. Your playbook was right.`
-        : `The price fell ${fmt(Math.abs(pnlPct), 1)}% after your decision. You avoided further loss by selling — or held through a dip, depending on your view.`;
+        ? `By not selling, you held through a ${fmt(pnlPct, 1)}% gain${atMark}. Your playbook was right.`
+        : `The price fell ${fmt(Math.abs(pnlPct), 1)}%${atMark} after your decision. You avoided further loss by selling — or held through a dip, depending on your view.`;
     }
     if (log.decisionType === 'buy') {
-      // Didn't buy
       return priceUp
-        ? `The price rose ${fmt(pnlPct, 1)}% since you paused. If you'd bought, that would have been a gain — but the playbook kept you disciplined.`
-        : `The price fell ${fmt(Math.abs(pnlPct), 1)}% since you paused. Your playbook saved you from that loss.`;
+        ? `The price rose ${fmt(pnlPct, 1)}%${atMark} since you paused. If you'd bought, that would have been a gain — but the playbook kept you disciplined.`
+        : `The price fell ${fmt(Math.abs(pnlPct), 1)}%${atMark} since you paused. Your playbook saved you from that loss.`;
     }
   }
 
   if (log.verdict === 'conscious-proceed' || log.verdict === 'no-rules-matched') {
-    // User made the trade
     if (log.tradeExecuted === false) {
-      return `You chose to proceed but didn't execute the trade. Price has moved ${pnlSign(currentPrice - log.priceAtDecision)}${fmt(pnlPct, 1)}% since then.`;
+      return `You chose to proceed but didn't execute the trade. Price has moved ${pnlSign(referencePrice - log.priceAtDecision)}${fmt(pnlPct, 1)}%${atMark}.`;
     }
     return priceUp
-      ? `Price is up ${fmt(pnlPct, 1)}% since your decision. The override worked out — this time.`
-      : `Price is down ${fmt(Math.abs(pnlPct), 1)}% since your decision. This is worth reflecting on.`;
+      ? `Price is up ${fmt(pnlPct, 1)}%${atMark}. The override worked out — this time.`
+      : `Price is down ${fmt(Math.abs(pnlPct), 1)}%${atMark}. This is worth reflecting on.`;
   }
 
-  return `Price has moved ${pnlSign(currentPrice - log.priceAtDecision)}${fmt(pnlPct, 1)}% since your decision.`;
+  return `Price has moved ${pnlSign(referencePrice - log.priceAtDecision)}${fmt(pnlPct, 1)}%${atMark} since your decision.`;
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -142,13 +150,78 @@ export default function DecisionDetailScreen() {
 
   const log = logs.find((l) => l.id === id) ?? null;
 
-  // Live price for outcome section
+  // ── Live price ─────────────────────────────────────────────────────────────
   const priceItems = useMemo(
     () => (log ? [{ ticker: log.ticker }] : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [log?.ticker],
   );
   const { prices, currencies, loading: priceLoading } =
     useLivePrices(priceItems, !!log);
+
+  // ── Milestone snapshots (Phase 9C) ─────────────────────────────────────────
+  const [milestoneSnapshots, setMilestoneSnapshots] = useState<
+    Array<{ milestone: number; price: number }>
+  >([]);
+
+  useEffect(() => {
+    if (!log) return;
+    supabase
+      .from('price_snapshots')
+      .select('days_from_decision, price')
+      .eq('decision_log_id', log.id)
+      .gt('days_from_decision', 0)
+      .order('days_from_decision', { ascending: true })
+      .then(({ data }) => {
+        if (data) {
+          setMilestoneSnapshots(
+            (data as any[]).map((r) => ({
+              milestone: r.days_from_decision as number,
+              price:     Number(r.price),
+            })),
+          );
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [log?.id]);
+
+  // ── Haiku framing (Phase 9E) ───────────────────────────────────────────────
+  // One-line AI reflection — gated on a 30d+ snapshot existing.
+  const [haikuFrame,   setHaikuFrame]   = useState<string | null>(null);
+  const [haikuLoading, setHaikuLoading] = useState(false);
+  const haikuFiredRef = useRef(false);
+
+  useEffect(() => {
+    const latestMilestone = milestoneSnapshots[milestoneSnapshots.length - 1];
+    if (
+      !log ||
+      !latestMilestone ||
+      latestMilestone.milestone < 30 ||
+      haikuFiredRef.current
+    ) return;
+
+    haikuFiredRef.current = true;
+
+    const pnlPct = ((latestMilestone.price - log.priceAtDecision) / log.priceAtDecision) * 100;
+    const pnlStr = `${pnlPct >= 0 ? '+' : ''}${fmt(pnlPct, 1)}%`;
+    const verdictLabel =
+      log.verdict === 'follow-playbook'   ? 'followed their playbook' :
+      log.verdict === 'conscious-proceed' ? 'overrode their playbook' :
+                                            'proceeded with no rule';
+
+    setHaikuLoading(true);
+    callClaudeRaw(
+      'Generate a single reflective sentence (15–25 words) about an investment decision and its outcome. Use plain, honest language. No financial jargon. No quotation marks. Do not start with "I".',
+      `${log.ticker} (${log.assetName}) — ${DECISION_LABEL[log.decisionType]} decision. The investor ${verdictLabel}. Price at decision: ${log.currency} ${fmt(log.priceAtDecision)}. ${latestMilestone.milestone}-day outcome: ${log.currency} ${fmt(latestMilestone.price)} (${pnlStr}).`,
+      15_000,
+      MODELS.simpleQA,
+    )
+      .then((text) => setHaikuFrame(text.trim()))
+      .catch(() => { /* silent — section stays hidden */ })
+      .finally(() => setHaikuLoading(false));
+  }, [milestoneSnapshots, log?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─────────────────────────────────────────────────────────────────────────────
 
   if (!log) {
     return (
@@ -168,22 +241,33 @@ export default function DecisionDetailScreen() {
     );
   }
 
-  const livePrice   = prices[log.ticker] ?? null;
-  const currency    = currencies[log.ticker] ?? log.currency;
-  const dtBadge     = DT_BADGE[log.decisionType] ?? DT_BADGE.unsure;
-  const pnl         = livePrice ? livePrice - log.priceAtDecision : null;
-  const pnlPct      = pnl !== null && log.priceAtDecision > 0
+  const livePrice = prices[log.ticker] ?? null;
+  const currency  = currencies[log.ticker] ?? log.currency;
+  const dtBadge   = DT_BADGE[log.decisionType] ?? DT_BADGE.unsure;
+
+  // Most recent milestone snapshot (for stable narrative + P&L)
+  const latestMilestone = milestoneSnapshots.length > 0
+    ? milestoneSnapshots[milestoneSnapshots.length - 1]
+    : null;
+
+  // Reference price for P&L: prefer latest milestone (stable), fall back to live
+  const referencePrice = latestMilestone?.price ?? livePrice;
+  const referenceCurrency = currency; // milestones stored with same currency as decision
+
+  const pnl    = referencePrice ? referencePrice - log.priceAtDecision : null;
+  const pnlPct = pnl !== null && log.priceAtDecision > 0
     ? (pnl / log.priceAtDecision) * 100
     : null;
 
-  // Resolve matched rule objects from the playbook (rules might be loaded)
-  const matchedRules = rules.filter((r) => log.rulesMatched.includes(r.id));
-
+  // Resolve matched rule objects
+  const matchedRules  = rules.filter((r) => log.rulesMatched.includes(r.id));
   const verdictFollowed = log.verdict === 'follow-playbook';
-  const verdictLabel =
+  const verdictLabel  =
     log.verdict === 'follow-playbook'   ? 'Followed playbook'  :
     log.verdict === 'conscious-proceed' ? 'Overrode playbook'  :
                                           'Proceeded (no rule)';
+
+  const daysTracked = daysSince(log.createdAt);
 
   return (
     <SafeAreaView style={s.safe}>
@@ -260,7 +344,6 @@ export default function DecisionDetailScreen() {
               </View>
             ))
           ) : (
-            // Rules were matched but no longer exist (deleted/removed since)
             <Text style={s.bodyText}>
               {log.rulesMatched.length} rule{log.rulesMatched.length !== 1 ? 's' : ''} fired — rules may have been removed since.
             </Text>
@@ -297,28 +380,75 @@ export default function DecisionDetailScreen() {
         <Section title="Outcome">
           {log.priceAtDecision > 0 ? (
             <>
-              <View style={s.priceRow}>
-                <View style={s.priceStat}>
-                  <Text style={s.priceStatLabel}>At decision</Text>
-                  <Text style={s.priceStatValue}>
+              {/* Days tracked label */}
+              <View style={s.daysTrackedRow}>
+                <Ionicons name="time-outline" size={13} color={G2} />
+                <Text style={s.daysTrackedText}>
+                  Tracked for{' '}
+                  <Text style={{ color: G1 }}>
+                    {daysTracked === 0
+                      ? 'less than a day'
+                      : `${daysTracked} day${daysTracked !== 1 ? 's' : ''}`}
+                  </Text>
+                </Text>
+              </View>
+
+              {/* ── Timeline row ── */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.timelineScroll}
+                style={s.timelineScrollView}
+              >
+                {/* At decision */}
+                <View style={s.timelineItem}>
+                  <Text style={s.timelineLabel}>At decision</Text>
+                  <Text style={s.timelineValue}>
                     {log.currency} {fmt(log.priceAtDecision)}
                   </Text>
                 </View>
-                <Ionicons name="arrow-forward" size={16} color={G2} style={{ marginTop: 18 }} />
-                <View style={s.priceStat}>
-                  <Text style={s.priceStatLabel}>Current price</Text>
-                  {priceLoading ? (
-                    <ActivityIndicator size="small" color={GOLD} />
-                  ) : livePrice ? (
-                    <Text style={s.priceStatValue}>{currency} {fmt(livePrice)}</Text>
-                  ) : (
-                    <Text style={[s.priceStatValue, { color: G2 }]}>—</Text>
-                  )}
-                </View>
-              </View>
 
-              {/* P&L bar */}
-              {livePrice && pnl !== null && pnlPct !== null && (
+                {/* Milestone snapshots */}
+                {milestoneSnapshots.map(({ milestone, price }) => (
+                  <View key={milestone} style={s.timelineStep}>
+                    <Ionicons name="arrow-forward" size={13} color={G2} style={s.timelineArrow} />
+                    <View style={s.timelineItem}>
+                      <Text style={s.timelineLabel}>{milestone}d</Text>
+                      <Text style={[
+                        s.timelineValue,
+                        price > log.priceAtDecision ? s.timelineUp :
+                        price < log.priceAtDecision ? s.timelineDown : undefined,
+                      ]}>
+                        {log.currency} {fmt(price)}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+
+                {/* Current live price */}
+                <View style={s.timelineStep}>
+                  <Ionicons name="arrow-forward" size={13} color={G2} style={s.timelineArrow} />
+                  <View style={s.timelineItem}>
+                    <Text style={s.timelineLabel}>Now</Text>
+                    {priceLoading ? (
+                      <ActivityIndicator size="small" color={GOLD} style={{ marginTop: 4 }} />
+                    ) : livePrice ? (
+                      <Text style={[
+                        s.timelineValue,
+                        livePrice > log.priceAtDecision ? s.timelineUp :
+                        livePrice < log.priceAtDecision ? s.timelineDown : undefined,
+                      ]}>
+                        {currency} {fmt(livePrice)}
+                      </Text>
+                    ) : (
+                      <Text style={[s.timelineValue, { color: G2 }]}>—</Text>
+                    )}
+                  </View>
+                </View>
+              </ScrollView>
+
+              {/* P&L bar — based on reference price (latest milestone or live) */}
+              {referencePrice !== null && pnl !== null && pnlPct !== null && (
                 <>
                   <View style={[s.pnlRow, pnl >= 0 ? s.pnlRowPos : s.pnlRowNeg]}>
                     <Ionicons
@@ -329,17 +459,33 @@ export default function DecisionDetailScreen() {
                     <Text style={[s.pnlText, pnl >= 0 ? s.pnlPos : s.pnlNeg]}>
                       {pnlSign(pnl)}{fmt(pnl)} ({pnlSign(pnlPct)}{fmt(pnlPct, 1)}%)
                     </Text>
-                    <Text style={s.pnlSince}>since decision</Text>
+                    <Text style={s.pnlSince}>
+                      {latestMilestone
+                        ? `at ${latestMilestone.milestone}d mark`
+                        : 'since decision'}
+                    </Text>
                   </View>
 
                   {/* Narrative */}
                   <Text style={s.narrativeText}>
-                    {outcomeNarrative(log, livePrice)}
+                    {outcomeNarrative(log, referencePrice, latestMilestone ?? undefined)}
                   </Text>
+
+                  {/* ── Haiku framing (Part E) ── */}
+                  {haikuLoading && (
+                    <ActivityIndicator
+                      size="small"
+                      color={G2}
+                      style={{ alignSelf: 'flex-start', marginTop: 4 }}
+                    />
+                  )}
+                  {haikuFrame && !haikuLoading && (
+                    <Text style={s.haikuFrame}>"{haikuFrame}"</Text>
+                  )}
                 </>
               )}
 
-              {!livePrice && !priceLoading && (
+              {!referencePrice && !priceLoading && (
                 <View style={s.trackingNote}>
                   <Ionicons name="time-outline" size={14} color={G2} />
                   <Text style={s.trackingText}>Live price unavailable. Outcome tracking continues.</Text>
@@ -465,27 +611,67 @@ const s = StyleSheet.create({
 
   // ── Verdict ───────────────────────────────────────────────────────────────
   decidedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  reasonCard: {
-    backgroundColor: S2,
-    borderRadius: 10,
-    padding: 14,
-    gap: 5,
-  },
+  reasonCard: { backgroundColor: S2, borderRadius: 10, padding: 14, gap: 5 },
   reasonLabel:{ fontSize: 11, fontWeight: '600', color: G2, textTransform: 'uppercase', letterSpacing: 0.6 },
   reasonText: { fontSize: 14, color: G1, fontFamily: BODY, lineHeight: 20 },
   tradeText:  { fontSize: 13, color: G2, fontFamily: BODY },
   tradeValue: { color: G1, fontWeight: '500' },
 
-  // ── Outcome ───────────────────────────────────────────────────────────────
-  priceRow: {
+  // ── Outcome — days tracked ────────────────────────────────────────────────
+  daysTrackedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  daysTrackedText: {
+    fontSize: 12,
+    color: G2,
+    fontFamily: BODY,
+  },
+
+  // ── Outcome — timeline ────────────────────────────────────────────────────
+  timelineScrollView: {
+    marginHorizontal: -4,
+  },
+  timelineScroll: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    paddingHorizontal: 4,
+    paddingVertical: 12,
+    gap: 0,
   },
-  priceStat:       { flex: 1, gap: 4 },
-  priceStatLabel:  { fontSize: 11, color: G2, textTransform: 'uppercase', letterSpacing: 0.6, fontWeight: '600' },
-  priceStatValue:  { fontSize: 18, fontWeight: '700', color: W, fontFamily: SERIF },
+  timelineStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  timelineArrow: {
+    marginTop: 16,
+    marginHorizontal: 6,
+  },
+  timelineItem: {
+    alignItems: 'center',
+    gap: 4,
+    minWidth: 72,
+  },
+  timelineLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: G2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+  timelineValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: W,
+    fontFamily: SERIF,
+    textAlign: 'center',
+  },
+  timelineUp:   { color: '#34D399' },
+  timelineDown: { color: '#F87171' },
 
+  // ── Outcome — P&L ─────────────────────────────────────────────────────────
   pnlRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -499,7 +685,7 @@ const s = StyleSheet.create({
   pnlText:     { fontSize: 15, fontWeight: '700' },
   pnlPos:      { color: '#34D399' },
   pnlNeg:      { color: '#F87171' },
-  pnlSince:    { fontSize: 12, color: G2, fontFamily: BODY },
+  pnlSince:    { fontSize: 12, color: G2, fontFamily: BODY, marginLeft: 'auto' },
 
   narrativeText: {
     fontSize: 14,
@@ -509,10 +695,19 @@ const s = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  trackingNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  // ── Haiku framing (Part E) ────────────────────────────────────────────────
+  haikuFrame: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: G2,
+    fontFamily: BODY,
+    lineHeight: 19,
+    marginTop: 2,
+    borderLeftWidth: 2,
+    borderLeftColor: GOLD,
+    paddingLeft: 10,
   },
+
+  trackingNote: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   trackingText: { fontSize: 13, color: G2, fontFamily: BODY },
 });

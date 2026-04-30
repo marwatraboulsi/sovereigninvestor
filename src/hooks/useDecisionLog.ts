@@ -167,5 +167,61 @@ export function useDecisionLog() {
     }
   }, []);
 
-  return { logs, loaded, reload, addLog, getOutcome };
+  // ─── Playbook validation ─────────────────────────────────────────────────────
+
+  /**
+   * For all supplied logs, queries 30-day price snapshots and determines:
+   *   · with30d    — how many logs have a 30-day snapshot stored
+   *   · validatedCount — among follow-playbook buy/sell decisions with a 30-day
+   *                      snapshot, how many were directionally correct:
+   *                        buy  → correct if 30d price < priceAtDecision (didn't buy, price fell)
+   *                        sell → correct if 30d price > priceAtDecision (held, price rose)
+   *
+   * Used by the Decisions summary strip to show the "Playbook validated" metric.
+   */
+  const getPlaybookValidated = useCallback(async (
+    currentLogs: DecisionLog[],
+  ): Promise<{ validatedCount: number; with30d: number }> => {
+    try {
+      if (currentLogs.length === 0) return { validatedCount: 0, with30d: 0 };
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return { validatedCount: 0, with30d: 0 };
+
+      const { data: snaps } = await supabase
+        .from('price_snapshots')
+        .select('decision_log_id, price')
+        .in('decision_log_id', currentLogs.map((l) => l.id))
+        .eq('days_from_decision', 30);
+
+      if (!snaps) return { validatedCount: 0, with30d: 0 };
+
+      const with30d = snaps.length;
+
+      const snap30dMap: Record<string, number> = {};
+      for (const snap of snaps as any[]) {
+        snap30dMap[snap.decision_log_id] = Number(snap.price);
+      }
+
+      let validatedCount = 0;
+      const fpLogs = currentLogs.filter((l) =>
+        l.verdict === 'follow-playbook' &&
+        (l.decisionType === 'buy' || l.decisionType === 'sell') &&
+        l.priceAtDecision > 0,
+      );
+
+      for (const log of fpLogs) {
+        const snap30 = snap30dMap[log.id];
+        if (snap30 === undefined) continue;
+        if (log.decisionType === 'buy'  && snap30 < log.priceAtDecision) validatedCount++;
+        if (log.decisionType === 'sell' && snap30 > log.priceAtDecision) validatedCount++;
+      }
+
+      return { validatedCount, with30d };
+    } catch {
+      return { validatedCount: 0, with30d: 0 };
+    }
+  }, []);
+
+  return { logs, loaded, reload, addLog, getOutcome, getPlaybookValidated };
 }
