@@ -1,10 +1,13 @@
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert, TextInput, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useUserProfile } from '@/hooks/useUserProfile';
+import { usePlaybook } from '@/hooks/usePlaybook';
 import { supabase } from '@/lib/supabase';
-import type { MacroConviction } from '@/types';
+import type { MacroConviction, PlaybookRule, RuleCategory } from '@/types';
+import { seedPlaybookOnFirstLogin } from '@/utils/seedPlaybookOnFirstLogin';
+import { RuleWizard } from '@/components/RuleWizard';
 
 import { BG, S1, S2, LINE, W, GOLD, G1, G2, SERIF, BODY } from '@/theme';
 import { useGuest } from '@/contexts/GuestContext';
@@ -116,10 +119,21 @@ export default function ProfileScreen() {
   }
 
   const { profile, saveProfile, clearProfile } = useUserProfile();
+  const { rules, loaded: rulesLoaded, reload: reloadRules, addRule, updateRule, pauseRule, removeRule } = usePlaybook();
+
   const [convictions, setConvictions]   = useState<MacroConviction[]>([]);
   const [note, setNote]                 = useState('');
   const [noteDirty, setNoteDirty]       = useState(false);
   const [editingField, setEditingField] = useState<string | null>(null);
+
+  // Playbook wizard state
+  const [wizardVisible,   setWizardVisible]   = useState(false);
+  const [editingRule,     setEditingRule]      = useState<PlaybookRule | undefined>(undefined);
+  // Track expanded rule bodies
+  const [expandedRules,   setExpandedRules]    = useState<Set<string>>(new Set());
+
+  // Seed rules once on first load if user has none
+  const seedAttempted = useRef(false);
 
   useFocusEffect(useCallback(() => {
     if (profile) {
@@ -127,7 +141,115 @@ export default function ProfileScreen() {
       setNote(profile.worldviewNote ?? '');
       setNoteDirty(false);
     }
-  }, [profile]));
+    reloadRules();
+  }, [profile, reloadRules]));
+
+  useEffect(() => {
+    if (profile?.onboardingComplete && rulesLoaded && rules.length === 0 && !seedAttempted.current) {
+      seedAttempted.current = true;
+      seedPlaybookOnFirstLogin(profile).then((seeded) => {
+        if (seeded) reloadRules();
+      });
+    }
+  }, [profile, rulesLoaded, rules.length, reloadRules]);
+
+  // ─── Playbook helpers ──────────────────────────────────────────────────────
+
+  function toggleExpanded(id: string) {
+    setExpandedRules((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function openAddRule() {
+    setEditingRule(undefined);
+    setWizardVisible(true);
+  }
+
+  function openEditRule(rule: PlaybookRule) {
+    setEditingRule(rule);
+    setWizardVisible(true);
+  }
+
+  function handleRuleTap(rule: PlaybookRule) {
+    Alert.alert(
+      rule.title,
+      undefined,
+      [
+        {
+          text: 'Edit',
+          onPress: () => openEditRule(rule),
+        },
+        {
+          text: rule.status === 'paused' ? 'Resume' : 'Pause',
+          onPress: () => pauseRule(rule.id),
+        },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert(
+              'Remove rule',
+              `Remove "${rule.title}" from your playbook?`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Remove', style: 'destructive', onPress: () => removeRule(rule.id) },
+              ],
+            ),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }
+
+  async function handleWizardSave(partial: Partial<PlaybookRule>) {
+    if (editingRule) {
+      await updateRule(editingRule.id, partial);
+    } else {
+      await addRule({
+        category:     partial.category!,
+        title:        partial.title!,
+        body:         partial.body!,
+        status:       partial.status ?? 'active',
+        sourceTrigger: 'manual',
+      });
+    }
+    reloadRules();
+  }
+
+  // Group active + paused rules by category (removed rules filtered by hook)
+  const CATEGORY_LABEL: Record<RuleCategory, string> = {
+    'timing':               'When I buy or sell',
+    'position-sizing':      'How much I invest',
+    'emotional-discipline': 'Managing my emotions',
+    'new-asset-class':      'Trying something new',
+    'life-events':          'Big life moments',
+    'tax-awareness':        'Tax considerations',
+    'portfolio-structure':  'How my portfolio is built',
+    'information-discipline': 'What information I act on',
+    'monitoring':           'How I track my investments',
+  };
+
+  const visibleRules = rules; // hook already excludes 'removed'
+
+  const rulesByCategory = visibleRules.reduce<Record<string, PlaybookRule[]>>((acc, r) => {
+    (acc[r.category] ??= []).push(r);
+    return acc;
+  }, {});
+
+  function formatRelativeDate(ts: number): string {
+    const diff = Date.now() - ts;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7)  return `${days}d ago`;
+    if (days < 30) return `${Math.floor(days / 7)}w ago`;
+    return `${Math.floor(days / 30)}mo ago`;
+  }
+
+  // ─── Convictions helpers ────────────────────────────────────────────────────
 
   async function toggleConviction(id: MacroConviction) {
     const next = convictions.includes(id)
@@ -206,6 +328,13 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={s.safe}>
+      <RuleWizard
+        visible={wizardVisible}
+        onClose={() => setWizardVisible(false)}
+        onSave={handleWizardSave}
+        existingRule={editingRule}
+      />
+
       <View style={s.header}>
         <Text style={s.headerTitle}>Profile</Text>
         <Text style={s.headerSub}>This is your mandate. The more I know about you, the better I can guide you in a way that actually fits your life.</Text>
@@ -333,6 +462,70 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* ── My Playbook ─────────────────────────────────────────────────── */}
+        <View style={s.section}>
+          <View style={s.playbookHeader}>
+            <Text style={s.sectionLabel}>My Playbook</Text>
+            <TouchableOpacity onPress={openAddRule} activeOpacity={0.6} style={s.addRuleBtn}>
+              <Text style={s.addRuleBtnText}>+ Add Rule</Text>
+            </TouchableOpacity>
+          </View>
+
+          {rulesLoaded && visibleRules.length === 0 ? (
+            <View style={s.playbookEmpty}>
+              <Text style={s.playbookEmptyText}>
+                Your playbook is empty. Run your first Intercept session to start building it.
+              </Text>
+            </View>
+          ) : (
+            Object.entries(rulesByCategory).map(([cat, catRules]) => (
+              <View key={cat} style={s.playbookGroup}>
+                <Text style={s.playbookGroupLabel}>
+                  {CATEGORY_LABEL[cat as RuleCategory] ?? cat}
+                </Text>
+                {catRules.map((rule) => {
+                  const expanded = expandedRules.has(rule.id);
+                  return (
+                    <TouchableOpacity
+                      key={rule.id}
+                      style={s.ruleCard}
+                      onPress={() => handleRuleTap(rule)}
+                      onLongPress={() => toggleExpanded(rule.id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={s.ruleCardTop}>
+                        <Text style={[s.ruleTitle, rule.status === 'paused' && s.ruleTitlePaused]}>
+                          {rule.title}
+                        </Text>
+                        <View style={s.ruleMeta}>
+                          {rule.status === 'paused' && (
+                            <View style={s.pausedBadge}>
+                              <Text style={s.pausedBadgeText}>Paused</Text>
+                            </View>
+                          )}
+                          <Text style={s.ruleDate}>{formatRelativeDate(rule.createdAt)}</Text>
+                        </View>
+                      </View>
+                      <Text
+                        style={s.ruleBody}
+                        numberOfLines={expanded ? undefined : 2}
+                      >
+                        {rule.body}
+                      </Text>
+                      {rule.overrideCount > 0 && (
+                        <Text style={s.overrideCount}>
+                          Overridden {rule.overrideCount} time{rule.overrideCount !== 1 ? 's' : ''}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* ── Footer links ─────────────────────────────────────────────────── */}
         <View style={s.footerLinks}>
           <TouchableOpacity onPress={() => router.push('/privacy')} activeOpacity={0.6}>
             <Text style={s.footerLinkText}>Privacy Policy</Text>
@@ -470,6 +663,43 @@ const s = StyleSheet.create({
   modalOptionTextActive: { color: W, fontWeight: '600' },
   modalOptionDot:        { width: 8, height: 8, borderRadius: 4, backgroundColor: GOLD },
 
+  // ── Playbook ──────────────────────────────────────────────────────────────
+  playbookHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  addRuleBtn:        { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, borderColor: GOLD },
+  addRuleBtnText:    { fontSize: 12, color: GOLD, fontWeight: '600' },
+
+  playbookEmpty: {
+    backgroundColor: S1,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LINE,
+    padding: 20,
+  },
+  playbookEmptyText: { fontSize: 14, color: G2, lineHeight: 20, fontFamily: BODY, textAlign: 'center' },
+
+  playbookGroup:      { gap: 8, marginTop: 4 },
+  playbookGroupLabel: { fontSize: 11, color: G2, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 8 },
+
+  ruleCard: {
+    backgroundColor: S1,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LINE,
+    padding: 14,
+    gap: 6,
+  },
+  ruleCardTop:     { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  ruleTitle:       { flex: 1, fontSize: 15, fontWeight: '600', color: W },
+  ruleTitlePaused: { color: G1 },
+  ruleMeta:        { alignItems: 'flex-end', gap: 4 },
+  ruleDate:        { fontSize: 11, color: G2 },
+  ruleBody:        { fontSize: 13, color: G1, lineHeight: 19, fontFamily: BODY },
+  overrideCount:   { fontSize: 11, color: G2, marginTop: 2 },
+
+  pausedBadge:     { backgroundColor: '#3D2F00', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
+  pausedBadgeText: { fontSize: 10, fontWeight: '700', color: '#F59E0B', letterSpacing: 0.3 },
+
+  // ─────────────────────────────────────────────────────────────────────────
   footerLinks:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
   footerLinkText: { fontSize: 13, color: G2, textDecorationLine: 'underline' },
   footerDivider:  { fontSize: 13, color: G2 },
