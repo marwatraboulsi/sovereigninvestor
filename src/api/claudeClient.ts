@@ -328,9 +328,10 @@ function buildRequestBody(
     model = isShort ? MODELS.simpleQA : MODELS.portfolioAnalysis;
   }
 
-  const systemPrompt = isSkillMode
-    ? getSkillSystemPrompt(skill!)
-    : buildChatSystemPrompt(userProfile, fundManagerContext);
+  const systemPrompt = options.systemPromptOverride
+    ?? (isSkillMode
+      ? getSkillSystemPrompt(skill!)
+      : buildChatSystemPrompt(userProfile, fundManagerContext));
 
   const useWebSearch = isSkillMode && !isPortfolioReview;
 

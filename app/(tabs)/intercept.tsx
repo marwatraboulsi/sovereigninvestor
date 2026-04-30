@@ -30,7 +30,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useGuest } from '@/contexts/GuestContext';
@@ -42,6 +42,7 @@ import { useDecisionLog } from '@/hooks/useDecisionLog';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useVaultData } from '@/hooks/useVaultData';
 import { useLivePrices } from '@/hooks/useLivePrices';
+import { deriveTopicFromTicker } from '@/skills/learnMode';
 import type { TickerInfo } from '@/data/tickerSearch';
 import type {
   InterceptSession,
@@ -492,6 +493,25 @@ function InterceptWizard() {
     });
   }
 
+  // ── "Learn first" → Learn Mode screen ────────────────────────────────────
+
+  function handleLearnFirst() {
+    const topic = deriveTopicFromTicker(session.ticker, session.assetName);
+    router.push('/learn/' + encodeURIComponent(topic));
+  }
+
+  // ── Return from Learn Mode: auto-open RuleWizard if category param present ─
+
+  const { learnRuleCategory } = useLocalSearchParams<{ learnRuleCategory?: string }>();
+  const lastLearnCategoryRef  = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (!learnRuleCategory || learnRuleCategory === lastLearnCategoryRef.current) return;
+    lastLearnCategoryRef.current = learnRuleCategory;
+    setRuleWizardCategory(learnRuleCategory as RuleCategory);
+    setRuleWizardVisible(true);
+  }, [learnRuleCategory]);
+
   // ── Step 1 can-proceed check ───────────────────────────────────────────────
 
   const step1Ready = !!session.decisionType && !!session.ticker;
@@ -616,6 +636,7 @@ function InterceptWizard() {
           liveCurrency={liveCurrency}
           onNext={advanceToStep4}
           onTalkItThrough={handleTalkItThrough}
+          onLearnFirst={handleLearnFirst}
           onProceedNow={advanceToStep4}
         />
       )}
@@ -811,12 +832,13 @@ interface Step3Props {
   liveCurrency:   string;
   onNext:         () => void;
   onTalkItThrough:() => void;
+  onLearnFirst:   () => void;
   onProceedNow:   () => void;
 }
 
 function Step3({
   session, checkingRules, vaultHolding, livePrice, liveCurrency,
-  onNext, onTalkItThrough, onProceedNow,
+  onNext, onTalkItThrough, onLearnFirst, onProceedNow,
 }: Step3Props) {
   const { rulesMatched, playbookGapDetected } = session;
 
@@ -869,6 +891,20 @@ function Step3({
             <Text style={s.noRulesBody}>
               Would you like to understand {session.assetName || session.ticker} better before you decide?
             </Text>
+
+            {/* Primary: Learn Mode — focused topic education */}
+            <TouchableOpacity
+              style={s.learnFirstBtn}
+              onPress={onLearnFirst}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="school-outline" size={16} color={GOLD} />
+              <Text style={s.learnFirstBtnText}>
+                Learn about {session.assetName || session.ticker} first
+              </Text>
+              <Ionicons name="arrow-forward" size={14} color={GOLD} />
+            </TouchableOpacity>
+
             <View style={s.noRulesActions}>
               <TouchableOpacity
                 style={s.learnBtn}
@@ -1435,12 +1471,34 @@ const s = StyleSheet.create({
   },
   noRulesTitle:   { fontSize: 17, fontWeight: '600', color: W, textAlign: 'center' },
   noRulesBody:    { fontSize: 14, color: G1, fontFamily: BODY, lineHeight: 21, textAlign: 'center' },
-  noRulesActions: { flexDirection: 'row', gap: 10, marginTop: 6 },
+
+  learnFirstBtn: {
+    flexDirection:   'row',
+    alignItems:      'center',
+    gap:             8,
+    width:           '100%',
+    backgroundColor: GOLD + '18',
+    borderRadius:    12,
+    borderWidth:     StyleSheet.hairlineWidth,
+    borderColor:     GOLD + '66',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop:       2,
+  },
+  learnFirstBtnText: {
+    flex:       1,
+    fontSize:   14,
+    fontWeight: '600',
+    color:      GOLD,
+    fontFamily: BODY,
+  },
+
+  noRulesActions: { flexDirection: 'row', gap: 10, marginTop: 2 },
   learnBtn:       {
-    flex: 1, backgroundColor: GOLD, borderRadius: 10,
+    flex: 1, backgroundColor: S2, borderRadius: 10,
     paddingVertical: 13, alignItems: 'center',
   },
-  learnBtnText:     { color: BG, fontSize: 14, fontWeight: '700' },
+  learnBtnText:     { color: G1, fontSize: 14, fontWeight: '600' },
   decideNowBtn:     {
     flex: 1, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE,
     borderRadius: 10, paddingVertical: 13, alignItems: 'center',

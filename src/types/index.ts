@@ -57,6 +57,8 @@ export interface ClaudeRequestOptions {
   userProfile?: UserProfile;
   fundManagerContext?: FundManagerContext;
   timeoutMs?: number;
+  /** Bypasses buildChatSystemPrompt / skill prompt. Used by Learn Mode. */
+  systemPromptOverride?: string;
 }
 
 export interface ClaudeResponse {
