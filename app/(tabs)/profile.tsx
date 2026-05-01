@@ -12,7 +12,7 @@ import { seedPlaybookOnFirstLogin } from '@/utils/seedPlaybookOnFirstLogin';
 import { CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
 import { RuleWizard } from '@/components/RuleWizard';
 
-import { BG, BG_DEEP, S1, S2, S_HIGH, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, BODY, R, R_SM, R_LG } from '@/theme';
+import { BG, BG_DEEP, S1, S2, S_HIGH, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, BODY, R, R_SM, R_LG, TAB_BAR_HEIGHT } from '@/theme';
 import { useGuest } from '@/contexts/GuestContext';
 import { AccountModal } from '@/components/AccountModal';
 
@@ -763,7 +763,7 @@ const s = StyleSheet.create({
   headerSub:   { fontFamily: SERIF, fontStyle: 'italic', fontSize: 14, color: G1, lineHeight: 21 },
 
   scroll:   { flex: 1 },
-  content:  { padding: 24, gap: 36, paddingBottom: 48 },
+  content:  { padding: 24, gap: 36, paddingBottom: TAB_BAR_HEIGHT },
 
   section:    { gap: 12 },
   sectionLabel: { fontFamily: SERIF, fontStyle: 'italic', fontSize: 13, color: GOLD, letterSpacing: 0.2, marginBottom: 2 },

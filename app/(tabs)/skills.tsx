@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useGuest } from '@/contexts/GuestContext';
 import { AccountModal } from '@/components/AccountModal';
 
-import { BG, S1, LINE, W, G1, G2, G3, GOLD, ON_PRIMARY, R, R_SM, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
+import { BG, S1, LINE, W, G1, G2, G3, GOLD, ON_PRIMARY, R, R_SM, TAB_BAR_HEIGHT, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
 
 const SKILLS = [
   {
@@ -105,7 +105,7 @@ const s = StyleSheet.create({
   headerSub:   { fontSize: 14, color: G1, marginTop: 6, lineHeight: 22, fontFamily: BODY, fontStyle: 'italic' },
 
   scroll:  { flex: 1 },
-  content: { padding: 24, gap: 20, paddingBottom: 48 },
+  content: { padding: 24, gap: 20, paddingBottom: TAB_BAR_HEIGHT },
 
   list: {
     gap: 2,

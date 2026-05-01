@@ -58,6 +58,12 @@ export const R    = 4;   // cards, list rows, surfaces
 export const R_MD = 8;   // modals, bottom sheets (inner)
 export const R_LG = 12;  // bottom sheet top corners
 
+// ─── Tab Bar ──────────────────────────────────────────────────────────────────
+// Custom tab bar is position:absolute — all scroll content and fixed footers
+// must add this as paddingBottom so nothing hides behind it.
+// Breakdown: paddingTop(10) + tabItem paddingVertical(4×2) + icon(18) + gap(5) + label(13) + paddingBottom(28) = 82
+export const TAB_BAR_HEIGHT = 82;
+
 // ─── Typography ───────────────────────────────────────────────────────────────
 //
 // Serif  → Lora (loaded via expo-google-fonts/lora)

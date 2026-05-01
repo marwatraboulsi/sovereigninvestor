@@ -25,7 +25,7 @@ import type { Message, FundManagerContext } from '@/types';
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 
-import { BG, BG_DEEP, S1, S2, S_HIGH, S_HIGHEST, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, BODY, R, R_SM, R_LG } from '@/theme';
+import { BG, BG_DEEP, S1, S2, S_HIGH, S_HIGHEST, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, BODY, R, R_SM, R_LG, TAB_BAR_HEIGHT } from '@/theme';
 
 // ─── Content ──────────────────────────────────────────────────────────────────
 
@@ -570,7 +570,7 @@ const s = StyleSheet.create({
   // Input area — glass composer
   inputArea: {
     paddingHorizontal: 20,
-    paddingBottom: 28,
+    paddingBottom: TAB_BAR_HEIGHT,
     paddingTop: 14,
     gap: 6,
     backgroundColor: 'rgba(7, 22, 16, 0.78)',

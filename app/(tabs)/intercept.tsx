@@ -55,7 +55,7 @@ import type {
   RuleCategory,
 } from '@/types';
 
-import { BG, BG_DEEP, S1, S2, S_HIGH, LINE, W, GOLD, G1, G2, G3, ON_PRIMARY, R, R_SM, R_LG, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
+import { BG, BG_DEEP, S1, S2, S_HIGH, LINE, W, GOLD, G1, G2, G3, ON_PRIMARY, R, R_SM, R_LG, TAB_BAR_HEIGHT, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
 
 // ─── Trigger definitions ──────────────────────────────────────────────────────
 
@@ -1370,7 +1370,7 @@ const s = StyleSheet.create({
   // ── Shared step layout ────────────────────────────────────────────────────
   stepFlex:    { flex: 1 },
   stepScroll:  { flex: 1 },
-  stepContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 24, gap: 16 },
+  stepContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: TAB_BAR_HEIGHT, gap: 16 },
 
   sectionLabel: {
     fontSize: 11,
@@ -1383,7 +1383,7 @@ const s = StyleSheet.create({
   instructionText: { fontSize: 14, color: G1, fontFamily: BODY, marginBottom: 4 },
 
   // ── Footer / next button ──────────────────────────────────────────────────
-  footer:      { paddingHorizontal: 20, paddingBottom: 24, paddingTop: 12 },
+  footer:      { paddingHorizontal: 20, paddingBottom: TAB_BAR_HEIGHT, paddingTop: 12 },
   nextBtn:     {
     flexDirection: 'row',
     backgroundColor: GOLD,

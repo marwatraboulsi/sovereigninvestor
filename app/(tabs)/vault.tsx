@@ -26,7 +26,7 @@ import type { TickerInfo, AssetType } from '@/data/tickerSearch';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
-import { BG, BG_DEEP, S1, S2, S_HIGH, S_HIGHEST, LINE, W, GOLD, GOLD_DEEP, G1, G2, G3, ON_PRIMARY, BUY, SELL, BROKEN, R, R_SM, R_LG, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
+import { BG, BG_DEEP, S1, S2, S_HIGH, S_HIGHEST, LINE, W, GOLD, GOLD_DEEP, G1, G2, G3, ON_PRIMARY, BUY, SELL, BROKEN, R, R_SM, R_LG, TAB_BAR_HEIGHT, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
 import { useGuest } from '@/contexts/GuestContext';
 import { AccountModal } from '@/components/AccountModal';
 const ERR = '#F87171';
@@ -861,7 +861,7 @@ const s = StyleSheet.create({
   safe:  { flex: 1, backgroundColor: BG },
   flex:  { flex: 1 },
   scroll: { flex: 1 },
-  content: { padding: 20, gap: 12, paddingBottom: 48 },
+  content: { padding: 20, gap: 12, paddingBottom: TAB_BAR_HEIGHT },
 
   header: {
     paddingHorizontal: 24, paddingVertical: 20,
