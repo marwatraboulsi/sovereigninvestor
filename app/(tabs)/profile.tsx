@@ -12,7 +12,7 @@ import { seedPlaybookOnFirstLogin } from '@/utils/seedPlaybookOnFirstLogin';
 import { CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
 import { RuleWizard } from '@/components/RuleWizard';
 
-import { BG, S1, S2, LINE, W, GOLD, G1, G2, SERIF, BODY } from '@/theme';
+import { BG, BG_DEEP, S1, S2, S_HIGH, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, BODY, R, R_SM, R_LG } from '@/theme';
 import { useGuest } from '@/contexts/GuestContext';
 import { AccountModal } from '@/components/AccountModal';
 
@@ -756,19 +756,18 @@ const s = StyleSheet.create({
 
   header: {
     paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LINE,
+    paddingTop: 20,
+    paddingBottom: 16,
   },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: W, letterSpacing: -0.5, fontFamily: SERIF },
-  headerSub:   { fontSize: 14, color: G1, marginTop: 4, fontFamily: BODY, lineHeight: 20 },
+  headerTitle: { fontSize: 11, fontWeight: '500', color: G2, textTransform: 'uppercase', letterSpacing: 2.2, fontFamily: BODY, marginBottom: 10 },
+  headerSub:   { fontFamily: SERIF, fontStyle: 'italic', fontSize: 14, color: G1, lineHeight: 21 },
 
   scroll:   { flex: 1 },
   content:  { padding: 24, gap: 36, paddingBottom: 48 },
 
   section:    { gap: 12 },
-  sectionLabel: { fontSize: 11, fontWeight: '600', color: G2, textTransform: 'uppercase', letterSpacing: 0.8 },
-  sectionSub:   { fontSize: 14, color: G1, lineHeight: 20, fontFamily: BODY, marginTop: -4 },
+  sectionLabel: { fontFamily: SERIF, fontStyle: 'italic', fontSize: 13, color: GOLD, letterSpacing: 0.2, marginBottom: 2 },
+  sectionSub:   { fontSize: 13, color: G1, lineHeight: 20, fontFamily: BODY, marginTop: -4 },
 
   list: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
   row: {
@@ -783,7 +782,7 @@ const s = StyleSheet.create({
   convictionGrid: { gap: 10 },
   convictionCard: {
     backgroundColor: S1,
-    borderRadius: 12,
+    borderRadius: R,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LINE,
     padding: 14,
@@ -804,7 +803,7 @@ const s = StyleSheet.create({
   noteLabel: { fontSize: 13, color: G1, fontFamily: BODY },
   noteInput: {
     backgroundColor: S1,
-    borderRadius: 12,
+    borderRadius: R,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LINE,
     padding: 14,
@@ -815,8 +814,8 @@ const s = StyleSheet.create({
     minHeight: 90,
     textAlignVertical: 'top',
   },
-  noteSaveBtn:     { alignSelf: 'flex-end', backgroundColor: GOLD, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  noteSaveBtnText: { color: BG, fontSize: 13, fontWeight: '600' },
+  noteSaveBtn:     { alignSelf: 'flex-end', backgroundColor: GOLD, paddingHorizontal: 16, paddingVertical: 8, borderRadius: R_SM },
+  noteSaveBtnText: { color: ON_PRIMARY, fontSize: 13, fontWeight: '600' },
 
   infoList: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
   infoRow:  { paddingVertical: 16 },
@@ -828,8 +827,8 @@ const s = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: S1,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: R_LG,
+    borderTopRightRadius: R_LG,
     paddingTop: 24,
     paddingBottom: 40,
     paddingHorizontal: 20,
@@ -842,7 +841,7 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 16,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: R,
   },
   modalOptionActive:     { backgroundColor: S2 },
   modalOptionText:       { fontSize: 16, color: G1 },
@@ -851,12 +850,12 @@ const s = StyleSheet.create({
 
   // ── Playbook ──────────────────────────────────────────────────────────────
   playbookHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  addRuleBtn:        { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, borderColor: GOLD },
+  addRuleBtn:        { paddingHorizontal: 12, paddingVertical: 4, borderRadius: R_SM, borderWidth: StyleSheet.hairlineWidth, borderColor: GOLD },
   addRuleBtnText:    { fontSize: 12, color: GOLD, fontWeight: '600' },
 
   playbookEmpty: {
     backgroundColor: S1,
-    borderRadius: 12,
+    borderRadius: R,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LINE,
     padding: 20,
@@ -868,7 +867,7 @@ const s = StyleSheet.create({
 
   ruleCard: {
     backgroundColor: S1,
-    borderRadius: 12,
+    borderRadius: R,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LINE,
     padding: 14,
@@ -896,8 +895,8 @@ const s = StyleSheet.create({
   convEditActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
   convEditCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, alignItems: 'center' },
   convEditCancelText: { fontSize: 15, color: G1 },
-  convEditSave:  { flex: 2, paddingVertical: 14, borderRadius: 12, backgroundColor: GOLD, alignItems: 'center' },
-  convEditSaveText: { fontSize: 15, fontWeight: '700', color: BG },
+  convEditSave:  { flex: 2, paddingVertical: 14, borderRadius: R_SM, backgroundColor: GOLD, alignItems: 'center' },
+  convEditSaveText: { fontSize: 15, fontWeight: '700', color: ON_PRIMARY },
 
   // ── Conviction record cards ───────────────────────────────────────────────
   convRecordCard: {

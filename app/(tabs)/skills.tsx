@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { useGuest } from '@/contexts/GuestContext';
 import { AccountModal } from '@/components/AccountModal';
 
-import { BG, LINE, W, G1, G2, GOLD, SERIF, BODY } from '@/theme';
+import { BG, S1, LINE, W, G1, G2, G3, GOLD, ON_PRIMARY, R, R_SM, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
 
 const SKILLS = [
   {
@@ -94,50 +94,50 @@ const s = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingVertical: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LINE,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: W, letterSpacing: -0.5, fontFamily: SERIF },
-  savedBtn:    { fontSize: 13, color: G2 },
-  headerSub:   { fontSize: 14, color: G1, marginTop: 4, lineHeight: 20, fontFamily: BODY },
+  headerTitle: { fontSize: 28, fontFamily: SERIF_BOLD, color: W, letterSpacing: 0.2 },
+  savedBtn:    { fontSize: 12, color: G2, fontFamily: BODY },
+  headerSub:   { fontSize: 14, color: G1, marginTop: 6, lineHeight: 22, fontFamily: BODY, fontStyle: 'italic' },
 
   scroll:  { flex: 1 },
-  content: { padding: 24, gap: 32, paddingBottom: 48 },
+  content: { padding: 24, gap: 20, paddingBottom: 48 },
 
   list: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: LINE,
+    gap: 2,
   },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 20,
+    paddingHorizontal: 16,
     gap: 16,
+    backgroundColor: S1,
+    borderRadius: R,
   },
-  itemBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LINE,
-  },
+  itemBorder: {},
   itemBody:   { flex: 1, gap: 6 },
-  itemTitle:  { fontSize: 17, fontWeight: '600', color: W },
-  itemDesc:   { fontSize: 14, color: G1, lineHeight: 20, fontFamily: BODY },
-  itemDetail: { fontSize: 12, color: G2 },
+  itemTitle:  { fontSize: 16, fontFamily: SERIF_SEMI, color: W },
+  itemDesc:   { fontSize: 13, color: G1, lineHeight: 20, fontFamily: BODY },
+  itemDetail: { fontSize: 11, color: GOLD, fontFamily: BODY, textTransform: 'uppercase', letterSpacing: 0.5 },
 
   note: {
     fontSize: 13,
     color: G2,
     lineHeight: 19,
     paddingTop: 4,
+    fontFamily: BODY,
+    fontStyle: 'italic',
   },
   disclaimer: {
     fontSize: 11,
-    color: G2,
+    color: G3,
     lineHeight: 16,
     paddingBottom: 8,
+    fontFamily: BODY,
   },
 });

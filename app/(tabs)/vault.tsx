@@ -26,7 +26,7 @@ import type { TickerInfo, AssetType } from '@/data/tickerSearch';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
-import { BG, S1, LINE, W, GOLD, G1, G2, SERIF } from '@/theme';
+import { BG, BG_DEEP, S1, S2, S_HIGH, S_HIGHEST, LINE, W, GOLD, GOLD_DEEP, G1, G2, G3, ON_PRIMARY, BUY, SELL, BROKEN, R, R_SM, R_LG, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
 import { useGuest } from '@/contexts/GuestContext';
 import { AccountModal } from '@/components/AccountModal';
 const ERR = '#F87171';
@@ -684,18 +684,20 @@ export default function VaultScreen() {
         {/* Header */}
         <View style={s.header}>
           <View style={s.headerRow}>
-            <Text style={s.headerTitle}>The Vault</Text>
+            <View>
+              <Text style={s.headerTitle}>The Vault</Text>
+            </View>
             <TouchableOpacity
               style={s.saveBtn}
               onPress={isGuest ? () => setShowAccountModal(true) : handleSave}
               activeOpacity={0.8}
             >
               <Text style={s.saveBtnText}>
-                {isGuest ? 'Sign up to save' : (saved ? 'Saved' : 'Save')}
+                {isGuest ? 'Sign up to save' : (saved ? 'Saved ✓' : 'Save')}
               </Text>
             </TouchableOpacity>
           </View>
-          <Text style={s.headerSub}>Add your holdings here and I'll keep track of everything. Your portfolio, your way.</Text>
+          <Text style={s.headerSub}>Your holdings, your way. Add positions and I'll track everything.</Text>
         </View>
 
         {/* Guest banner */}
@@ -861,59 +863,56 @@ const s = StyleSheet.create({
 
   header: {
     paddingHorizontal: 24, paddingVertical: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE,
   },
   headerRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: W, letterSpacing: -0.5, fontFamily: SERIF },
-  headerSub:   { fontSize: 14, color: G1, marginTop: 4, lineHeight: 20, fontFamily: 'Spectral_400Regular' },
-  saveBtn:     { backgroundColor: GOLD, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  saveBtnText: { color: BG, fontSize: 14, fontWeight: '600' },
+  headerTitle: { fontSize: 28, fontFamily: SERIF_BOLD, color: W, letterSpacing: 0.2 },
+  headerSub:   { fontSize: 14, color: G1, marginTop: 6, lineHeight: 22, fontFamily: BODY, fontStyle: 'italic' },
+  saveBtn:     { backgroundColor: GOLD, paddingHorizontal: 16, paddingVertical: 8, borderRadius: R_SM },
+  saveBtnText: { color: ON_PRIMARY, fontSize: 13, fontFamily: SERIF_BOLD },
 
   guestBanner: {
-    backgroundColor: '#1a2e28',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a4038',
+    backgroundColor: S1,
     paddingHorizontal: 16,
     paddingVertical: 8,
     alignItems: 'center',
   },
-  guestBannerText: { fontSize: 12, color: G2, fontFamily: 'Spectral_400Regular', textAlign: 'center' },
+  guestBannerText: { fontSize: 12, color: G2, fontFamily: BODY, textAlign: 'center' },
 
-  liveBar:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
-  liveBarText: { flex: 1, color: '#10B981', fontSize: 12 },
+  liveBar:     { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 8 },
+  liveBarText: { flex: 1, color: BUY, fontSize: 12 },
 
-  addCard:        { backgroundColor: S1, borderRadius: 14, padding: 16, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
-  addCardLabel:   { color: G2, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 },
+  addCard:        { backgroundColor: S1, borderRadius: R, padding: 16, gap: 12 },
+  addCardLabel:   { color: G2, fontSize: 11, fontFamily: BODY, textTransform: 'uppercase', letterSpacing: 0.8 },
   addCardActions: { flexDirection: 'row', gap: 10 },
-  cancelBtn:      { flex: 1, paddingVertical: 11, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, alignItems: 'center' },
+  cancelBtn:      { flex: 1, paddingVertical: 11, borderRadius: R_SM, backgroundColor: S2, alignItems: 'center' },
   cancelBtnText:  { color: G2, fontSize: 14 },
-  confirmBtn:     { flex: 1, backgroundColor: GOLD, paddingVertical: 11, borderRadius: 10, alignItems: 'center' },
-  confirmBtnOff:  { backgroundColor: S1, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
-  confirmBtnText: { color: BG, fontSize: 14, fontWeight: '600' },
-  addBtn:         { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, backgroundColor: S1 },
+  confirmBtn:     { flex: 1, backgroundColor: GOLD, paddingVertical: 11, borderRadius: R_SM, alignItems: 'center' },
+  confirmBtnOff:  { backgroundColor: S2 },
+  confirmBtnText: { color: ON_PRIMARY, fontSize: 14, fontFamily: SERIF_BOLD },
+  addBtn:         { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, paddingHorizontal: 16, borderRadius: R, backgroundColor: S1 },
   addBtnText:     { color: G1, fontSize: 15 },
-  emptyHint:      { color: G2, fontSize: 13, lineHeight: 19, textAlign: 'center', paddingHorizontal: 20, paddingTop: 8 },
+  emptyHint:      { color: G2, fontSize: 13, lineHeight: 19, textAlign: 'center', paddingHorizontal: 20, paddingTop: 8, fontFamily: BODY, fontStyle: 'italic' },
 
   // Cash card
-  cashCard:       { backgroundColor: S1, borderRadius: 14, padding: 14, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
+  cashCard:       { backgroundColor: S1, borderRadius: R, padding: 14, gap: 12 },
   cashTopRow:     { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  cashBadge:      { backgroundColor: '#042228', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
-  cashBadgeText:  { color: '#06B6D4', fontSize: 12, fontWeight: '700' },
-  cashCardTitle:  { color: G1, fontSize: 14, fontWeight: '500' },
-  fieldLabel:     { color: G2, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
-  optionalTag:    { color: G2, fontSize: 10, fontWeight: '400', textTransform: 'none' },
+  cashBadge:      { backgroundColor: BG_DEEP, paddingHorizontal: 10, paddingVertical: 4, borderRadius: R_SM },
+  cashBadgeText:  { color: G1, fontSize: 11, fontFamily: BODY, textTransform: 'uppercase', letterSpacing: 0.6 },
+  cashCardTitle:  { color: G1, fontSize: 14, fontFamily: SERIF, fontStyle: 'italic' },
+  fieldLabel:     { color: G2, fontSize: 10, fontFamily: BODY, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 6 },
+  optionalTag:    { color: G3, fontSize: 10, textTransform: 'none' },
   cashFields:     { flexDirection: 'row', gap: 10 },
   cashFieldWrap:  { flex: 1 },
-  cashInputWrap:  { flexDirection: 'row', alignItems: 'center', backgroundColor: BG, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, paddingHorizontal: 10 },
+  cashInputWrap:  { flexDirection: 'row', alignItems: 'center', backgroundColor: BG_DEEP, borderRadius: R, paddingHorizontal: 10 },
   cashPrefix:     { color: G2, fontSize: 11, marginRight: 6 },
   cashSuffix:     { color: G2, fontSize: 14, marginLeft: 4 },
   cashInput:      { flex: 1, color: W, fontSize: 14, paddingVertical: 9 },
 
-  currencySelector:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: BG, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, paddingHorizontal: 10, paddingVertical: 10 },
-  currencyValue:         { color: W, fontSize: 14, fontWeight: '600' },
-  currencyDropdown:      { backgroundColor: S1, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, marginTop: 4, overflow: 'hidden' },
+  currencySelector:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: BG_DEEP, borderRadius: R, paddingHorizontal: 10, paddingVertical: 10 },
+  currencyValue:         { color: W, fontSize: 14, fontFamily: SERIF_SEMI },
+  currencyDropdown:      { backgroundColor: S2, borderRadius: R, marginTop: 4, overflow: 'hidden' },
   currencyOption:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10 },
   currencyOptionBorder:  { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
   currencyOptionText:    { color: G1, fontSize: 14 },
@@ -921,59 +920,59 @@ const s = StyleSheet.create({
 
 const lock = StyleSheet.create({
   container: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 40 },
-  iconWrap:  { width: 72, height: 72, borderRadius: 36, backgroundColor: S1, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, marginBottom: 8 },
-  title:     { fontSize: 26, fontWeight: '700', color: W, letterSpacing: -0.5 },
-  sub:       { color: G2, fontSize: 14, textAlign: 'center', lineHeight: 21 },
-  btn:       { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: GOLD, paddingHorizontal: 24, paddingVertical: 14, borderRadius: 14, marginTop: 12 },
-  btnText:   { color: BG, fontSize: 15, fontWeight: '600' },
+  iconWrap:  { width: 72, height: 72, borderRadius: R, backgroundColor: S1, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  title:     { fontSize: 26, fontFamily: SERIF_BOLD, color: W, letterSpacing: 0.3 },
+  sub:       { color: G2, fontSize: 14, textAlign: 'center', lineHeight: 21, fontFamily: BODY, fontStyle: 'italic' },
+  btn:       { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: GOLD, paddingHorizontal: 24, paddingVertical: 14, borderRadius: R_SM, marginTop: 12 },
+  btnText:   { color: ON_PRIMARY, fontSize: 14, fontFamily: SERIF_BOLD },
 });
 
 const tv = StyleSheet.create({
-  container:   { backgroundColor: S1, borderRadius: 14, padding: 16, gap: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
+  container:   { backgroundColor: S1, borderRadius: R, padding: 16, gap: 8 },
   topRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label:       { color: G2, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6 },
-  currencyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BG, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
-  currencyText:{ color: G1, fontSize: 12, fontWeight: '600' },
-  dropdown:    { backgroundColor: BG, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, overflow: 'hidden' },
+  label:       { color: G2, fontSize: 10, fontFamily: BODY, textTransform: 'uppercase', letterSpacing: 0.8 },
+  currencyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BG_DEEP, paddingHorizontal: 10, paddingVertical: 5, borderRadius: R_SM },
+  currencyText:{ color: G1, fontSize: 12, fontFamily: SERIF_SEMI },
+  dropdown:    { backgroundColor: S2, borderRadius: R, overflow: 'hidden', marginTop: 4 },
   option:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10 },
   optionBorder:{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
   optionText:  { color: G1, fontSize: 13 },
-  value:       { color: W, fontSize: 26, fontWeight: '700', letterSpacing: -0.5 },
+  value:       { color: W, fontSize: 26, fontFamily: SERIF_BOLD, letterSpacing: 0.2, fontVariant: ['tabular-nums'] },
 });
 
 const row = StyleSheet.create({
-  container: { backgroundColor: S1, borderRadius: 14, padding: 14, gap: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
+  container: { backgroundColor: S1, borderRadius: R, padding: 14, gap: 10 },
   topRow:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tickerBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  badge:          { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, flexShrink: 0 },
-  badgeText:      { fontSize: 12, fontWeight: '700' },
+  badge:          { paddingHorizontal: 8, paddingVertical: 3, borderRadius: R_SM, flexShrink: 0 },
+  badgeText:      { fontSize: 10, fontFamily: BODY, textTransform: 'uppercase', letterSpacing: 0.5 },
   nameWrap:       { gap: 2 },
-  ticker:    { color: W, fontSize: 14, fontWeight: '700' },
-  name:      { color: G2, fontSize: 12 },
-  sector:    { color: G2, fontSize: 11, fontStyle: 'italic' },
+  ticker:    { color: W, fontSize: 14, fontFamily: SERIF_BOLD },
+  name:      { color: G2, fontSize: 12, fontFamily: BODY },
+  sector:    { color: G3, fontSize: 11, fontStyle: 'italic', fontFamily: BODY },
   fields:    { flexDirection: 'row', gap: 10 },
   fieldWrap: { flex: 1, gap: 6 },
-  label:     { color: G2, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: BG, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, paddingHorizontal: 10 },
-  input:     { flex: 1, color: W, fontSize: 14, paddingVertical: 9 },
-  prefix:    { color: G2, fontSize: 14, marginRight: 4 },
-  suffix:    { color: G2, fontSize: 14, marginLeft: 4 },
+  label:     { color: G2, fontSize: 10, fontFamily: BODY, textTransform: 'uppercase', letterSpacing: 0.6 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: BG_DEEP, borderRadius: R, paddingHorizontal: 10 },
+  input:     { flex: 1, color: W, fontSize: 14, paddingVertical: 9, fontVariant: ['tabular-nums'] },
+  prefix:    { color: G2, fontSize: 12, marginRight: 4 },
+  suffix:    { color: G2, fontSize: 12, marginLeft: 4 },
 });
 
 const ch = StyleSheet.create({
-  container:         { backgroundColor: S1, borderRadius: 16, padding: 16, gap: 12, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
+  container:         { backgroundColor: S1, borderRadius: R, padding: 16, gap: 12 },
   topRow:            { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title:             { color: W, fontSize: 15, fontWeight: '600' },
-  dropdown:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BG, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
-  dropdownText:      { color: G1, fontSize: 12 },
-  dropdownMenu:      { backgroundColor: BG, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, overflow: 'hidden', alignSelf: 'flex-end' },
+  title:             { color: W, fontSize: 14, fontFamily: SERIF, fontStyle: 'italic' },
+  dropdown:          { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BG_DEEP, paddingHorizontal: 10, paddingVertical: 6, borderRadius: R_SM },
+  dropdownText:      { color: G1, fontSize: 12, fontFamily: BODY },
+  dropdownMenu:      { backgroundColor: S2, borderRadius: R, overflow: 'hidden', alignSelf: 'flex-end', marginTop: 4 },
   dropdownItem:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, gap: 24 },
   dropdownItemBorder:{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: LINE },
   dropdownItemText:  { color: G1, fontSize: 13 },
   body:              { flexDirection: 'row', alignItems: 'center', gap: 16 },
   legend:            { flex: 1, gap: 8 },
   legendRow:         { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  legendDot:         { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
-  legendLabel:       { flex: 1, color: G1, fontSize: 12 },
-  legendValue:       { color: W, fontSize: 12, fontWeight: '600' },
+  legendDot:         { width: 7, height: 7, borderRadius: 2, flexShrink: 0 },
+  legendLabel:       { flex: 1, color: G1, fontSize: 12, fontFamily: BODY },
+  legendValue:       { color: W, fontSize: 12, fontFamily: SERIF_SEMI, fontVariant: ['tabular-nums'] },
 });

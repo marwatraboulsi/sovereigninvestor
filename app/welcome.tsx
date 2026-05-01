@@ -1,82 +1,143 @@
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { BG, LINE, W, GOLD, G1, G2, SERIF, BODY } from '@/theme';
+/**
+ * Welcome / Splash — Modern Archivist edition.
+ *
+ * "Sovereign Investor — A discipline, not a destination."
+ * Ceremonial composition: centred, editorial serif, gold rule.
+ */
 
-const VALUE_PROPS = [
-  { title: 'Tailored to your level', description: 'Beginner or advanced, the app adapts to where you are.' },
-  { title: 'Real investing frameworks', description: 'MACE, 8-phase analysis, portfolio archetypes, and more.' },
-  { title: 'Ask anything, anytime', description: 'Your personal investing knowledge base, always available.' },
-];
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
+import { BG, GOLD, GOLD_DEEP, W, G1, G2, ON_PRIMARY, SERIF, SERIF_BOLD, BODY, R_SM } from '@/theme';
 
 export default function WelcomeScreen() {
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={s.bg}>
-      <SafeAreaView style={s.safe}>
+    <View style={[s.bg, { paddingTop: insets.top }]}>
 
-        <View style={s.hero}>
-          <Text style={s.appName}>Sovereign{'\n'}Investor</Text>
-          <Text style={s.tagline}>Your investing education system</Text>
-        </View>
+      {/* ── Centred ceremonial composition ── */}
+      <View style={s.center}>
 
-        <View style={s.divider} />
+        {/* Edition eyebrow */}
+        <Text style={s.edition}>Volume I · First Edition</Text>
 
-        <View style={s.props}>
-          {VALUE_PROPS.map((p, i) => (
-            <View key={p.title} style={[s.prop, i < VALUE_PROPS.length - 1 && s.propBorder]}>
-              <Text style={s.propTitle}>{p.title}</Text>
-              <Text style={s.propDesc}>{p.description}</Text>
-            </View>
-          ))}
-        </View>
+        {/* Logotype */}
+        <Text style={s.logo}>
+          Sovereign{'\n'}<Text style={s.logoAccent}>Investor</Text>
+        </Text>
 
-        <View style={s.footer}>
-          <TouchableOpacity style={s.cta} onPress={() => router.push('/onboarding')} activeOpacity={0.8}>
-            <Text style={s.ctaText}>Get Started</Text>
-          </TouchableOpacity>
-          <Text style={s.legal}>Educational content only. Not investment advice.</Text>
-        </View>
+        {/* Gold rule */}
+        <View style={s.rule}/>
 
-      </SafeAreaView>
+        {/* Tagline */}
+        <Text style={s.tagline}>
+          A discipline, not a destination.{'\n'}For investors who answer to themselves.
+        </Text>
+
+      </View>
+
+      {/* ── Footer ── */}
+      <View style={[s.footer, { paddingBottom: Math.max(insets.bottom, 28) }]}>
+        <TouchableOpacity
+          style={s.btn}
+          onPress={() => router.push('/onboarding')}
+          activeOpacity={0.85}
+        >
+          <Text style={s.btnText}>Begin</Text>
+        </TouchableOpacity>
+
+        <Text style={s.signIn}>
+          Already keep a Playbook?{' '}
+          <Text style={s.signInLink} onPress={() => router.push('/auth')}>Sign in</Text>
+        </Text>
+      </View>
+
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  bg:   { flex: 1, backgroundColor: BG },
-  safe: { flex: 1, paddingHorizontal: 28 },
-
-  hero: {
+  bg: {
     flex: 1,
+    backgroundColor: BG,
+  },
+
+  // ── Centred area ───────────────────────────────────────────────────
+  center: {
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 20,
+    paddingHorizontal: 40,
   },
-  appName: {
-    fontSize: 52,
-    fontWeight: '800',
+
+  edition: {
+    fontSize: 10,
+    letterSpacing: 3.2,         // 0.32em at 10px
+    textTransform: 'uppercase',
+    color: GOLD,
+    marginBottom: 28,
+    fontFamily: BODY,
+  },
+
+  logo: {
+    fontFamily: SERIF_BOLD,
+    fontSize: 38,
+    letterSpacing: 0.8,
     color: W,
-    letterSpacing: -1.5,
-    lineHeight: 58,
-    marginBottom: 16,
-    fontFamily: SERIF,
+    lineHeight: 44,
+    textAlign: 'center',
   },
-  tagline: { fontSize: 17, color: G1, lineHeight: 24, fontFamily: BODY },
+  logoAccent: {
+    color: GOLD,
+  },
 
-  divider: { height: StyleSheet.hairlineWidth, backgroundColor: LINE, marginVertical: 36 },
-
-  props: { gap: 0 },
-  prop: { paddingVertical: 20 },
-  propBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
-  propTitle:  { fontSize: 16, fontWeight: '600', color: W, marginBottom: 4 },
-  propDesc:   { fontSize: 14, color: G1, lineHeight: 20, fontFamily: BODY },
-
-  footer: { paddingBottom: 16, gap: 14 },
-  cta: {
+  rule: {
+    width: 32,
+    height: 1,
     backgroundColor: GOLD,
-    borderRadius: 14,
-    paddingVertical: 17,
+    marginVertical: 20,
+  },
+
+  tagline: {
+    fontFamily: SERIF,
+    fontStyle: 'italic',
+    fontSize: 15,
+    color: G1,
+    lineHeight: 24,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+
+  // ── Footer ────────────────────────────────────────────────────────
+  footer: {
+    paddingHorizontal: 40,
+    paddingTop: 0,
+    alignItems: 'center',
+    gap: 18,
+  },
+
+  btn: {
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: R_SM,
+    backgroundColor: GOLD,
+    // Gold gradient effect via shadow overlay approximation
     alignItems: 'center',
   },
-  ctaText: { color: BG, fontSize: 17, fontWeight: '700' },
-  legal:   { textAlign: 'center', fontSize: 12, color: G2 },
+  btnText: {
+    fontFamily: SERIF_BOLD,
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    color: ON_PRIMARY,
+  },
+
+  signIn: {
+    fontSize: 12,
+    color: G2,
+  },
+  signInLink: {
+    color: GOLD,
+  },
 });

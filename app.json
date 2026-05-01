@@ -14,7 +14,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sovereigninvestor.app",
-      "buildNumber": "19",
+      "buildNumber": "20",
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Allow Sovereign Investor to use speech recognition for voice input.",
         "NSMicrophoneUsageDescription": "Allow Sovereign Investor to use the microphone for voice input.",
@@ -30,6 +30,7 @@
         "backgroundColor": "#0d1f1b"
       },
       "permissions": [
+        "android.permission.RECORD_AUDIO",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -57,6 +58,12 @@
       "eas": {
         "projectId": "a42ba7c1-849f-4682-bcec-27e2d2dfc9e5"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a42ba7c1-849f-4682-bcec-27e2d2dfc9e5"
     }
   }
 }

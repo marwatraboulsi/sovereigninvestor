@@ -25,7 +25,7 @@ import type { Message, FundManagerContext } from '@/types';
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 
-import { BG, S1, S2, LINE, W, GOLD, G1, G2, G3, SERIF, BODY } from '@/theme';
+import { BG, BG_DEEP, S1, S2, S_HIGH, S_HIGHEST, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, BODY, R, R_SM, R_LG } from '@/theme';
 
 // ─── Content ──────────────────────────────────────────────────────────────────
 
@@ -222,21 +222,24 @@ export default function ChatScreen() {
       {/* Header */}
       <View style={s.header}>
         <View style={s.headerRow}>
-          <Text style={s.headerTitle}>Your Fund Guide</Text>
+          <View style={s.headerLeft}>
+            <Text style={s.headerEyebrow}>Counsel</Text>
+            <Text style={s.headerTitle}>Nora.</Text>
+          </View>
           <View style={s.headerActions}>
             {!isGuest && (
               <TouchableOpacity onPress={() => router.push('/conversations')} activeOpacity={0.6} style={s.headerIconBtn}>
-                <Ionicons name="time-outline" size={20} color={G1} />
+                <Ionicons name="time-outline" size={18} color={G2} />
               </TouchableOpacity>
             )}
             {hasMessages && (
-              <TouchableOpacity onPress={reset} activeOpacity={0.6}>
-                <Text style={s.headerAction}>New chat</Text>
+              <TouchableOpacity onPress={reset} activeOpacity={0.6} style={s.newChatBtn}>
+                <Text style={s.newChatText}>New</Text>
               </TouchableOpacity>
             )}
           </View>
         </View>
-        <Text style={s.headerSub}>Ask me anything about investing. I know your profile and I'll guide you in a way that makes sense for where you are.</Text>
+        <Text style={s.headerSub}>A thinking partner, not an oracle. She knows what you said you would do.</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -397,6 +400,12 @@ function Bubble({ msg, isLast, onSuggest }: { msg: Message; isLast: boolean; onS
 
   return (
     <View style={s.asstWrap}>
+      {/* Nora identifier — left rule + italic name */}
+      <View style={s.noraIdent}>
+        <View style={s.noraRule}/>
+        <Text style={s.noraLabel}>Nora</Text>
+      </View>
+
       {sections.length > 1 ? (
         sections.map((sec, i) => (
           <View key={i} style={s.section}>
@@ -465,20 +474,22 @@ const s = StyleSheet.create({
 
   header: {
     paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: LINE,
+    paddingTop: 16,
+    paddingBottom: 14,
   },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
-  headerTitle:   { fontSize: 28, fontWeight: '700', color: W, letterSpacing: -0.5, fontFamily: SERIF },
-  headerSub:     { fontSize: 14, color: G1, marginTop: 4, lineHeight: 20, fontFamily: BODY },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  headerIconBtn: { padding: 2 },
-  headerAction:  { fontSize: 14, color: G1 },
+  headerLeft:    { flex: 1 },
+  headerEyebrow: { fontSize: 10, letterSpacing: 1.8, textTransform: 'uppercase', color: GOLD, fontFamily: BODY, fontWeight: '500', marginBottom: 4 },
+  headerTitle:   { fontFamily: SERIF, fontSize: 28, fontWeight: '400', color: W, letterSpacing: -0.3, lineHeight: 32 },
+  headerSub:     { fontFamily: SERIF, fontStyle: 'italic', fontSize: 13, color: G1, marginTop: 8, lineHeight: 20, maxWidth: 290 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 4 },
+  headerIconBtn: { padding: 4 },
+  newChatBtn:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: R_SM, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
+  newChatText:   { fontSize: 11, color: G2, letterSpacing: 0.5 },
 
   scroll:        { flex: 1 },
   scrollContent: { padding: 24, paddingBottom: 12, gap: 20 },
@@ -515,26 +526,33 @@ const s = StyleSheet.create({
   // User
   userWrap:   { alignItems: 'flex-end' },
   userBubble: {
-    backgroundColor: GOLD, borderRadius: 20, borderBottomRightRadius: 4,
-    paddingHorizontal: 16, paddingVertical: 11, maxWidth: '80%',
+    backgroundColor: S_HIGH, borderRadius: R,
+    paddingHorizontal: 18, paddingVertical: 14, maxWidth: '82%',
   },
-  userText: { color: BG, fontSize: 15, lineHeight: 22, fontWeight: '500' },
+  userText: { color: W, fontSize: 14, lineHeight: 22, fontFamily: BODY },
+
+  // Nora identifier
+  noraIdent: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  noraRule:  { width: 14, height: 1, backgroundColor: GOLD },
+  noraLabel: { fontFamily: SERIF, fontStyle: 'italic', fontSize: 11, color: GOLD, letterSpacing: 0.4 },
 
   // Assistant
-  asstWrap: { gap: 16 },
+  asstWrap: { gap: 10 },
   section:  { gap: 6 },
   secHeading: {
-    fontSize: 12, fontWeight: '700', color: G1,
+    fontSize: 12, fontWeight: '600', color: G2,
     textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4,
+    fontFamily: BODY,
   },
 
-  // Chips
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  // Chips — suggestion buttons
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   chip: {
-    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: LINE,
+    borderRadius: R_SM, paddingHorizontal: 14, paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: LINE,
+    backgroundColor: 'transparent',
   },
-  chipText: { color: G1, fontSize: 13 },
+  chipText: { color: GOLD, fontSize: 12, fontFamily: BODY },
 
   // Thinking
   thinking:     { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -549,27 +567,37 @@ const s = StyleSheet.create({
   errorText:    { color: '#FF6B6B', fontSize: 13, flex: 1 },
   errorDismiss: { color: G1, fontSize: 13, marginLeft: 12 },
 
-  // Input area
-  inputArea: { paddingHorizontal: 14, paddingBottom: 14, paddingTop: 4, gap: 6 },
-  disclaimer: { textAlign: 'center', fontSize: 11, color: G3 },
+  // Input area — glass composer
+  inputArea: {
+    paddingHorizontal: 20,
+    paddingBottom: 28,
+    paddingTop: 14,
+    gap: 6,
+    backgroundColor: 'rgba(7, 22, 16, 0.78)',
+  },
+  disclaimer: { textAlign: 'center', fontSize: 10, color: G3, fontFamily: SERIF, fontStyle: 'italic' },
 
   // Tools menu
   toolsMenu: {
-    backgroundColor: S1, borderRadius: 16, borderWidth: 1,
-    borderColor: LINE, overflow: 'hidden',
-    marginBottom: 4,
+    backgroundColor: S1, borderRadius: R,
+    overflow: 'hidden', marginBottom: 4,
   },
   toolItem:       { paddingHorizontal: 18, paddingVertical: 14 },
   toolItemBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
-  toolLabel:      { color: G1, fontSize: 15 },
+  toolLabel:      { color: G1, fontSize: 14, fontFamily: BODY },
 
-  // Input card
+  // Input card — sharp, tonal
   inputCard: {
-    backgroundColor: S1, borderRadius: 22, borderWidth: 1, borderColor: LINE,
+    backgroundColor: S_HIGHEST, borderRadius: R,
     paddingTop: 4, paddingBottom: 4, paddingHorizontal: 4,
+    // Ghost bottom border — the one permitted line
+    shadowColor: 'rgba(206, 197, 184, 0.16)',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   inputField: {
-    color: W, fontSize: 15, lineHeight: 22,
+    color: W, fontSize: 15, lineHeight: 22, fontFamily: BODY,
     paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6,
     maxHeight: 130, minHeight: 44,
   },
@@ -582,12 +610,12 @@ const s = StyleSheet.create({
 
   toolsBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 10, paddingVertical: 7, borderRadius: 14,
+    paddingHorizontal: 10, paddingVertical: 7, borderRadius: R_SM,
   },
-  toolsBtnText: { color: G1, fontSize: 13, fontWeight: '500' },
+  toolsBtnText: { color: G2, fontSize: 12, fontFamily: BODY },
 
   micBtn: {
-    width: 34, height: 34, borderRadius: 17,
+    width: 34, height: 34, borderRadius: R_SM,
     alignItems: 'center', justifyContent: 'center',
   },
   micBtnActive: {
@@ -596,57 +624,58 @@ const s = StyleSheet.create({
     borderColor: W,
   },
   sendBtn: {
-    width: 34, height: 34, borderRadius: 17,
+    width: 34, height: 34, borderRadius: R_SM,
     backgroundColor: GOLD, alignItems: 'center', justifyContent: 'center',
   },
-  sendBtnOff: { backgroundColor: G3 },
+  sendBtnOff: { backgroundColor: S2 },
 
-  privacyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  privacyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
   privacySheet: {
     backgroundColor: S1,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: R_LG,
+    borderTopRightRadius: R_LG,
     padding: 28,
     paddingBottom: 44,
     gap: 16,
   },
-  privacyTitle:   { fontSize: 18, fontWeight: '700', color: W, fontFamily: SERIF },
-  privacyBody:    { fontSize: 15, color: G1, lineHeight: 24, fontFamily: BODY },
+  privacyTitle:   { fontFamily: SERIF, fontSize: 18, fontWeight: '400', color: W },
+  privacyBody:    { fontSize: 14, color: G1, lineHeight: 22, fontFamily: BODY },
   privacyBtn: {
     backgroundColor: GOLD,
-    borderRadius: 12,
-    paddingVertical: 15,
+    borderRadius: R_SM,
+    paddingVertical: 16,
     alignItems: 'center',
     marginTop: 4,
   },
-  privacyBtnText: { color: BG, fontSize: 16, fontWeight: '700' },
+  privacyBtnText: { color: ON_PRIMARY, fontSize: 15, fontWeight: '700', fontFamily: SERIF },
 });
 
 const md = StyleSheet.create({
-  body:        { color: W, fontSize: 15, lineHeight: 24, fontFamily: BODY },
-  heading1:    { color: W, fontSize: 18, fontWeight: '700', marginBottom: 6, marginTop: 10 },
-  heading2:    { color: W, fontSize: 16, fontWeight: '700', marginBottom: 4, marginTop: 8 },
-  heading3:    { color: G1, fontSize: 15, fontWeight: '600', marginBottom: 4, marginTop: 6 },
-  strong:      { color: W, fontWeight: '700' },
-  em:          { color: G1, fontStyle: 'italic' },
+  body:        { color: W, fontSize: 15, lineHeight: 25, fontFamily: BODY },
+  heading1:    { color: W, fontSize: 22, fontWeight: '400', marginBottom: 6, marginTop: 10, fontFamily: SERIF },
+  heading2:    { color: W, fontSize: 18, fontWeight: '400', marginBottom: 4, marginTop: 8, fontFamily: SERIF },
+  heading3:    { color: G1, fontSize: 15, fontWeight: '600', marginBottom: 4, marginTop: 6, fontFamily: BODY },
+  strong:      { color: W, fontWeight: '600' },
+  em:          { color: G1, fontStyle: 'italic', fontFamily: SERIF },
   bullet_list: { marginVertical: 4 },
-  list_item:   { color: W, fontSize: 15, lineHeight: 24 },
+  list_item:   { color: W, fontSize: 15, lineHeight: 24, fontFamily: BODY },
+  // Pull-quote: gold left border — the one permitted line in the system
   blockquote: {
-    borderLeftColor: G2, borderLeftWidth: 2,
-    paddingLeft: 12, paddingVertical: 4, marginVertical: 8,
+    borderLeftColor: GOLD, borderLeftWidth: 2,
+    paddingLeft: 18, paddingVertical: 4, marginVertical: 8,
   },
   code_inline: {
-    backgroundColor: S2, color: G1, borderRadius: 4,
+    backgroundColor: S2, color: G1, borderRadius: R_SM,
     paddingHorizontal: 4, fontSize: 13,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
   },
-  fence:       { backgroundColor: S2, borderRadius: 10, padding: 14, marginVertical: 6 },
+  fence:       { backgroundColor: S2, borderRadius: R, padding: 14, marginVertical: 6 },
   code_block:  { color: G1, fontSize: 13, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
   hr:          { backgroundColor: LINE, height: StyleSheet.hairlineWidth, marginVertical: 12 },
-  link:        { color: W, textDecorationLine: 'underline' },
-  table:       { borderWidth: 1, borderColor: LINE, borderRadius: 8, marginVertical: 8 },
+  link:        { color: GOLD, textDecorationLine: 'underline' },
+  table:       { borderWidth: StyleSheet.hairlineWidth, borderColor: LINE, borderRadius: R, marginVertical: 8 },
   thead:       { backgroundColor: S2 },
-  th:          { color: G1, fontWeight: '700', padding: 8, fontSize: 13 },
-  td:          { color: W, padding: 8, fontSize: 13 },
+  th:          { color: G1, fontWeight: '600', padding: 8, fontSize: 13, fontFamily: BODY },
+  td:          { color: W, padding: 8, fontSize: 13, fontFamily: BODY },
   tr:          { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
 });
