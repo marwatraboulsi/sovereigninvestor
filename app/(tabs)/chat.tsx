@@ -11,6 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+const ORIENTATION_KEY = 'orientation_seen';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useEffect, useState, useCallback } from 'react';
@@ -91,6 +92,13 @@ export default function ChatScreen() {
   }, [seed, historyLoading]);
 
   // Pick up conversation switches from the browser
+  // Show orientation once on first open
+  useFocusEffect(useCallback(() => {
+    AsyncStorage.getItem(ORIENTATION_KEY).then((seen) => {
+      if (!seen) router.push('/orientation');
+    });
+  }, []));
+
   useFocusEffect(useCallback(() => {
     const pendingId = consumePendingConversation();
     if (pendingId) {

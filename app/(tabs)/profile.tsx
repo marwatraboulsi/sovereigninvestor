@@ -12,7 +12,7 @@ import { seedPlaybookOnFirstLogin } from '@/utils/seedPlaybookOnFirstLogin';
 import { CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
 import { RuleWizard } from '@/components/RuleWizard';
 
-import { BG, BG_DEEP, S1, S2, S_HIGH, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, BODY, R, R_SM, R_LG, TAB_BAR_HEIGHT } from '@/theme';
+import { BG, BG_DEEP, S1, S2, S_HIGH, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, SERIF_SEMI, BODY, R, R_SM, R_LG, TAB_BAR_HEIGHT } from '@/theme';
 import { useGuest } from '@/contexts/GuestContext';
 import { AccountModal } from '@/components/AccountModal';
 
@@ -599,6 +599,19 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* ── How it works ────────────────────────────────────────────────── */}
+        <TouchableOpacity
+          style={s.howItWorksRow}
+          onPress={() => router.push('/how-it-works')}
+          activeOpacity={0.7}
+        >
+          <View style={s.howItWorksLeft}>
+            <Text style={s.howItWorksLabel}>How it works</Text>
+            <Text style={s.howItWorksSub}>The behavioral architecture, in plain language</Text>
+          </View>
+          <Text style={s.howItWorksChevron}>›</Text>
+        </TouchableOpacity>
+
         {/* ── My Playbook ─────────────────────────────────────────────────── */}
         <View style={s.section}>
           <View style={s.playbookHeader}>
@@ -917,6 +930,37 @@ const s = StyleSheet.create({
   confBadgeMed:  { backgroundColor: S2 },
   confBadgeLow:  { backgroundColor: 'transparent', borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
   confBadgeText: { fontSize: 10, fontWeight: '700', color: G2, textTransform: 'uppercase', letterSpacing: 0.4 },
+
+  // ── How it works ─────────────────────────────────────────────────────────
+  howItWorksRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: S1,
+    borderRadius: R,
+    padding: 16,
+    paddingHorizontal: 18,
+  },
+  howItWorksLeft: {
+    flex: 1,
+    gap: 3,
+  },
+  howItWorksLabel: {
+    fontSize: 15,
+    fontFamily: SERIF_SEMI,
+    color: W,
+  },
+  howItWorksSub: {
+    fontSize: 12,
+    fontFamily: BODY,
+    fontStyle: 'italic',
+    color: G2,
+  },
+  howItWorksChevron: {
+    fontSize: 20,
+    color: G3,
+    fontFamily: BODY,
+  },
 
   // ─────────────────────────────────────────────────────────────────────────
   footerLinks:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },

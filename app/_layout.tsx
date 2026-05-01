@@ -63,8 +63,10 @@ function RootLayoutInner() {
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />
         <Stack.Screen name="welcome"        options={{ headerShown: false }} />
         <Stack.Screen name="onboarding"     options={{ headerShown: false }} />
-        <Stack.Screen name="learn/[topic]"  options={{ headerShown: false }} />
-        <Stack.Screen name="extended-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="learn/[topic]"    options={{ headerShown: false }} />
+        <Stack.Screen name="extended-profile"  options={{ headerShown: false }} />
+        <Stack.Screen name="orientation"       options={{ headerShown: false }} />
+        <Stack.Screen name="how-it-works"      options={{ headerShown: false }} />
       </Stack>
     </>
   );

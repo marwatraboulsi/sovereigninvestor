@@ -56,6 +56,7 @@ import type {
 } from '@/types';
 
 import { BG, BG_DEEP, S1, S2, S_HIGH, LINE, W, GOLD, G1, G2, G3, ON_PRIMARY, R, R_SM, R_LG, TAB_BAR_HEIGHT, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
+import { RuleCard } from '@/components/RuleCard';
 
 // ─── Trigger definitions ──────────────────────────────────────────────────────
 
@@ -973,28 +974,9 @@ function Step3({
   );
 }
 
+// TriageRuleCard → uses shared RuleCard component (expandable, shows origin + bias)
 function TriageRuleCard({ rule }: { rule: PlaybookRule }) {
-  const CATEGORY_SHORT: Record<string, string> = {
-    'timing':               'Timing',
-    'position-sizing':      'Position sizing',
-    'emotional-discipline': 'Emotional discipline',
-    'new-asset-class':      'New asset class',
-    'life-events':          'Life events',
-    'tax-awareness':        'Tax awareness',
-    'portfolio-structure':  'Portfolio structure',
-    'information-discipline': 'Information discipline',
-    'monitoring':           'Monitoring',
-  };
-  return (
-    <View style={s.ruleCard}>
-      <View style={s.ruleCardAccent} />
-      <View style={s.ruleCardBody}>
-        <Text style={s.ruleCategoryTag}>{CATEGORY_SHORT[rule.category] ?? rule.category}</Text>
-        <Text style={s.ruleTitle}>{rule.title}</Text>
-        <Text style={s.ruleBody}>{rule.body}</Text>
-      </View>
-    </View>
-  );
+  return <RuleCard rule={rule} />;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
