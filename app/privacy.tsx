@@ -30,8 +30,8 @@ const SECTIONS = [
   {
     title: 'How your data is used',
     body: [
-      'Your profile settings are used to personalise how your Fund Guide responds to you. They are never shared externally.',
-      'Your vault holdings are used to give your Guide context when you ask portfolio-related questions. They are never shared or sold.',
+      'Your profile settings are used to personalise how Nora responds to you. They are never shared externally.',
+      'Your vault holdings are used to give Nora context when you ask portfolio-related questions. They are never shared or sold.',
       'We do not run advertising. Your data is not used to train AI models or shared with third parties.',
     ],
   },

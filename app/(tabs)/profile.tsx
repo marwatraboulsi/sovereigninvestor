@@ -400,7 +400,7 @@ export default function ProfileScreen() {
             <Text style={s.headerInfoBtnText}>?</Text>
           </TouchableOpacity>
         </View>
-        <Text style={s.headerSub}>Your mandate, your rules, your worldview. The more defined this is, the sharper your Guide becomes.</Text>
+        <Text style={s.headerSub}>Your mandate, your rules, your worldview. The more defined this is, the sharper Nora becomes.</Text>
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
@@ -576,11 +576,24 @@ export default function ProfileScreen() {
           )}
         </View>
 
+        {/* ── Decision Log link ────────────────────────────────────────────── */}
+        <TouchableOpacity
+          style={s.decisionLogRow}
+          onPress={() => router.push('/(tabs)/decisions')}
+          activeOpacity={0.7}
+        >
+          <View style={s.decisionLogLeft}>
+            <Text style={s.decisionLogLabel}>Decision Log</Text>
+            <Text style={s.decisionLogSub}>Every Intercept session, logged. Your behavioral record over time.</Text>
+          </View>
+          <Text style={s.decisionLogChevron}>›</Text>
+        </TouchableOpacity>
+
         {/* ── 3. Convictions & Worldview ───────────────────────────────────── */}
         <View style={s.section}>
           <Text style={s.sectionLabel}>Convictions & Worldview</Text>
           <Text style={s.sectionSub}>
-            Your beliefs about the world — built through Research, the Intercept, and your own thinking. Your Guide holds these as background context.
+            Your beliefs about the world — built through Research, the Intercept, and your own thinking. Nora holds these as background context.
           </Text>
 
           {/* Conviction records (from Research / Intercept) */}
@@ -666,7 +679,7 @@ export default function ProfileScreen() {
         <View style={s.section}>
           <Text style={s.sectionLabel}>Your Mandate</Text>
           <Text style={s.sectionSub}>
-            Shapes how your Guide responds — depth, framing, time horizons, and tone.
+            Shapes how Nora responds — depth, framing, time horizons, and tone.
           </Text>
           <View style={s.list}>
             {rows.map((row, i) => (
@@ -959,6 +972,21 @@ const s = StyleSheet.create({
     fontFamily: BODY,
     paddingRight: 14,
   },
+
+  // ── Decision Log row ──────────────────────────────────────────────────────
+  decisionLogRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: S1,
+    borderRadius: R,
+    padding: 16,
+    paddingHorizontal: 18,
+  },
+  decisionLogLeft: { flex: 1, gap: 3 },
+  decisionLogLabel: { fontSize: 15, fontFamily: SERIF_SEMI, color: W },
+  decisionLogSub:   { fontSize: 12, fontFamily: BODY, fontStyle: 'italic', color: G2 },
+  decisionLogChevron: { fontSize: 20, color: G3, fontFamily: BODY },
 
   // ── Rule list ─────────────────────────────────────────────────────────────
   ruleList: { gap: 0 },

@@ -961,7 +961,7 @@ function Step3({
         {/* "Talk it through" secondary link */}
         {!playbookGapDetected && (
           <TouchableOpacity style={s.talkLink} onPress={onTalkItThrough} activeOpacity={0.6}>
-            <Text style={s.talkLinkText}>Talk it through with your Guide →</Text>
+            <Text style={s.talkLinkText}>Talk it through with Nora →</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
