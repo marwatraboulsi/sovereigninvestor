@@ -82,7 +82,7 @@ export default function AuthScreen() {
         Crypto.CryptoDigestAlgorithm.SHA256,
         rawNonce
       );
-      const response = await GoogleSignin.signIn({ nonce: hashedNonce });
+      const response = await (GoogleSignin.signIn as any)({ nonce: hashedNonce });
       const idToken = response.data?.idToken;
       if (!idToken) throw new Error('No ID token from Google.');
       const { error: err } = await supabase.auth.signInWithIdToken({

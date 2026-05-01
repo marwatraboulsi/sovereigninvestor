@@ -151,29 +151,29 @@ export function useConversation() {
       if (!user) return;
 
       // Insert message + bump updated_at in parallel
-      const ops: Promise<any>[] = [
-        supabase.from('messages').insert({
+      const ops = [
+        Promise.resolve(supabase.from('messages').insert({
           conversation_id: convId,
           user_id:         user.id,
           role:            message.role,
           content:         message.content,
           suggestions:     message.suggestions ?? null,
-        }),
-        supabase
+        })),
+        Promise.resolve(supabase
           .from('conversations')
           .update({ updated_at: new Date().toISOString() })
-          .eq('id', convId),
+          .eq('id', convId)),
       ];
 
       // Auto-title: set from first user message if title is still null
       if (message.role === 'user') {
         const truncated = message.content.slice(0, 60) + (message.content.length > 60 ? '…' : '');
         ops.push(
-          supabase
+          Promise.resolve(supabase
             .from('conversations')
             .update({ title: truncated })
             .eq('id', convId)
-            .is('title', null),
+            .is('title', null)),
         );
       }
 

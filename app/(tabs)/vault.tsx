@@ -600,8 +600,10 @@ export default function VaultScreen() {
     setHoldings(updated);
   };
 
-  const saveCash = async (updated: CashData, userId: string) => {
-    await supabase.from('profiles').update({ vault_cash: updated }).eq('id', userId);
+  const saveCash = async (updated: CashData) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from('profiles').update({ vault_cash: updated }).eq('id', user.id);
   };
 
   const updateCash = (patch: Partial<CashData>) => {
@@ -654,7 +656,7 @@ export default function VaultScreen() {
       return bAlloc - aAlloc;
     });
     await saveHoldings(sorted, user.id);
-    await saveCash(cash, user.id);
+    await saveCash(cash);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
