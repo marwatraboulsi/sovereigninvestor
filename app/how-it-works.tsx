@@ -1,23 +1,36 @@
 /**
  * How It Works — behavioral architecture in plain language.
  *
- * A static editorial page explaining the system to users who want to
- * understand what they're using and why it's built the way it is.
+ * Tab-based section navigator: each tab explains one part of the system.
+ * Users can jump directly to the section relevant to their current context.
  * Written as if Nora authored it.
  *
- * Linked from Profile. No AI calls — the content is the design.
+ * Linked from Profile (and the ? icon in each tab header).
  */
 
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import Svg, { Path } from 'react-native-svg';
 import {
-  BG, S1, S_HIGH,
+  BG, BG_DEEP, S1, S_HIGH,
   GOLD, W, G1, G2, G3,
-  TAB_BAR_HEIGHT, R,
+  TAB_BAR_HEIGHT, R, R_SM,
   SERIF, SERIF_BOLD, SERIF_SEMI, BODY,
 } from '@/theme';
+
+// ─── Section tabs ─────────────────────────────────────────────────────────────
+
+const TABS = [
+  { id: 'playbook',  label: 'Playbook'  },
+  { id: 'intercept', label: 'Intercept' },
+  { id: 'chat',      label: 'Nora'      },
+  { id: 'research',  label: 'Research'  },
+  { id: 'vault',     label: 'Vault'     },
+] as const;
+
+type TabId = typeof TABS[number]['id'];
 
 // ─── Back icon ────────────────────────────────────────────────────────────────
 
@@ -29,29 +42,206 @@ function BackIcon() {
   );
 }
 
-// ─── Section component ────────────────────────────────────────────────────────
-
-function Section({ eyebrow, heading, children }: {
-  eyebrow: string;
-  heading: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={s.section}>
-      <Text style={s.sectionEyebrow}>{eyebrow}</Text>
-      <Text style={s.sectionHeading}>{heading}</Text>
-      {children}
-    </View>
-  );
-}
+// ─── Components ───────────────────────────────────────────────────────────────
 
 function Para({ children }: { children: string }) {
   return <Text style={s.para}>{children}</Text>;
 }
 
+function Step({ number, title, children }: { number: string; title: string; children: string }) {
+  return (
+    <View style={s.step}>
+      <View style={s.stepLeft}>
+        <Text style={s.stepNumber}>{number}</Text>
+        <View style={s.stepLine} />
+      </View>
+      <View style={s.stepRight}>
+        <Text style={s.stepTitle}>{title}</Text>
+        <Text style={s.stepBody}>{children}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Tab content ──────────────────────────────────────────────────────────────
+
+function PlaybookContent() {
+  return (
+    <View style={s.tabContent}>
+      <Text style={s.tabHeading}>Your rules. Not mine.</Text>
+      <Para>
+        {'The Playbook is the foundation of everything. It\'s a set of rules you\'ve written — or built through experience — that define how you invest.'}
+      </Para>
+      <Para>
+        {'I don\'t tell you what rules to follow. The whole point is that you decide when you\'re calm, so those decisions are already made when you\'re not.'}
+      </Para>
+
+      <View style={s.divider} />
+
+      <Text style={s.subheading}>How rules get created</Text>
+      <Step number="01" title="Written by you">
+        {'Tap + Add Rule in your Profile to write a rule from scratch. Use your own language — the simpler, the better.'}
+      </Step>
+      <Step number="02" title="Added at setup">
+        {'When you first joined, your answers seeded a starting playbook based on your profile. These are a foundation, not a prescription.'}
+      </Step>
+      <Step number="03" title="Created after an Intercept">
+        {'When you override a rule or the Intercept spots a gap, you\'re offered the chance to write a new rule on the spot. This is how your playbook earns its credibility.'}
+      </Step>
+
+      <View style={s.divider} />
+
+      <Para>
+        {'Rules don\'t need to be sophisticated. They need to be honest. "I don\'t buy anything I haven\'t held a position in for 30 days" is a rule. Tap any rule in your Profile to expand it and see the bias it guards against.'}
+      </Para>
+    </View>
+  );
+}
+
+function InterceptContent() {
+  return (
+    <View style={s.tabContent}>
+      <Text style={s.tabHeading}>The pause before the action.</Text>
+      <Para>
+        {'Before you buy or sell anything, run it through Intercept. You declare what you\'re thinking of doing, identify what\'s driving the impulse, and I check it against your Playbook.'}
+      </Para>
+
+      <View style={s.divider} />
+
+      <Text style={s.subheading}>How it works</Text>
+      <Step number="01" title="Declare the trade">
+        {'Say what you\'re thinking of buying or selling, and roughly how much. You\'re forcing yourself to articulate it — which is itself a useful pause.'}
+      </Step>
+      <Step number="02" title="Name the trigger">
+        {'Select what\'s driving it: FOMO, a news event, a feeling, a conviction, a plan. Naming the trigger is the most important moment in the process.'}
+      </Step>
+      <Step number="03" title="See your rules">
+        {'I check your Playbook against what you\'ve declared. If a rule applies, you see it. You then decide: follow it, or consciously proceed.'}
+      </Step>
+      <Step number="04" title="Log the decision">
+        {'Either way, the decision is logged. Conscious override is different from impulsive action. Over time, you\'ll see the pattern.'}
+      </Step>
+
+      <View style={s.divider} />
+
+      <Para>
+        {'This is the core mechanic. Not because it stops you from acting — it never blocks you — but because it makes the decision conscious.'}
+      </Para>
+    </View>
+  );
+}
+
+function ChatContent() {
+  return (
+    <View style={s.tabContent}>
+      <Text style={s.tabHeading}>Your fund guide, not your fund manager.</Text>
+      <Para>
+        {'I don\'t have opinions about your portfolio. I have context about your patterns, your rules, your convictions, and your stated goals — and I use that to give you more useful responses.'}
+      </Para>
+
+      <View style={s.divider} />
+
+      <Text style={s.subheading}>What you can ask me</Text>
+      <Step number="01" title="Think something through">
+        {'If you\'re wrestling with a decision or a market view, talk it through with me. I\'ll push back when your reasoning looks like bias wearing a rational costume.'}
+      </Step>
+      <Step number="02" title="Understand a concept">
+        {'Ask me to explain anything — a financial instrument, a market mechanism, a strategy. I adjust depth to your knowledge level automatically.'}
+      </Step>
+      <Step number="03" title="Review your playbook">
+        {'Ask me to review your rules, spot contradictions, or suggest gaps. I read your Intercept history to give you pattern-aware feedback.'}
+      </Step>
+
+      <View style={s.divider} />
+
+      <Para>
+        {'I\'m not here to tell you what to buy. I\'m here to help you think more clearly about what you already believe.'}
+      </Para>
+    </View>
+  );
+}
+
+function ResearchContent() {
+  return (
+    <View style={s.tabContent}>
+      <Text style={s.tabHeading}>Structured analysis. Not noise.</Text>
+      <Para>
+        {'The Research tab gives you four specialist tools, each built around a specific analytical framework. They use live web data and take a few minutes to run properly.'}
+      </Para>
+
+      <View style={s.divider} />
+
+      <Text style={s.subheading}>The four tools</Text>
+      <Step number="01" title="Portfolio Reviewer">
+        {'Pulls your Vault holdings directly and gives you a structured review: allocation, diversification, archetype fit, and rebalance suggestions.'}
+      </Step>
+      <Step number="02" title="Catalyst Scanner">
+        {'Identifies and classifies market-moving events using the Five-Category framework: Institutional Flow, Consumer Shift, Technology Disruption, Policy Shift, Macro Regime.'}
+      </Step>
+      <Step number="03" title="ETF Analyzer">
+        {'Evaluates any ETF using the MACE framework: Mandate, Assets, Composition, and Expense. Returns a scorecard you can save.'}
+      </Step>
+      <Step number="04" title="Stock Researcher">
+        {'Eight-phase due diligence: Business Model, Financial Health, Competitive Moat, Management, Growth Catalysts, Risk, Valuation, and Investment Thesis.'}
+      </Step>
+
+      <View style={s.divider} />
+
+      <Para>
+        {'Every completed analysis can be saved to your Archive as a slide deck. Come back to it when you\'re making a decision.'}
+      </Para>
+    </View>
+  );
+}
+
+function VaultContent() {
+  return (
+    <View style={s.tabContent}>
+      <Text style={s.tabHeading}>Your portfolio, in context.</Text>
+      <Para>
+        {'The Vault is where you track what you hold. It\'s not a brokerage — it\'s a reference layer that makes the rest of the app aware of your actual positions.'}
+      </Para>
+
+      <View style={s.divider} />
+
+      <Text style={s.subheading}>What it does</Text>
+      <Step number="01" title="Holdings">
+        {'Add any asset — stocks, ETFs, crypto, alternatives, cash. Enter the amount you hold and the app tracks the total picture.'}
+      </Step>
+      <Step number="02" title="Cash position">
+        {'Log your available cash separately. This gives Portfolio Reviewer an accurate picture of your investable position, not just what\'s already deployed.'}
+      </Step>
+      <Step number="03" title="Context for Research">
+        {'When you run Portfolio Reviewer, it reads directly from your Vault. You don\'t have to re-enter anything.'}
+      </Step>
+      <Step number="04" title="Intercept awareness">
+        {'The Intercept can reference your Vault when you declare a trade, giving your Guide context on how the new position would change your overall structure.'}
+      </Step>
+
+      <View style={s.divider} />
+
+      <Para>
+        {'The Vault is intentionally simple. The complexity is in what it enables — not in itself.'}
+      </Para>
+    </View>
+  );
+}
+
+const TAB_CONTENT: Record<TabId, React.ReactNode> = {
+  playbook:  <PlaybookContent />,
+  intercept: <InterceptContent />,
+  chat:      <ChatContent />,
+  research:  <ResearchContent />,
+  vault:     <VaultContent />,
+};
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function HowItWorksScreen() {
+  const { tab: initialTab } = useLocalSearchParams<{ tab?: string }>();
+  const validInitial = TABS.some((t) => t.id === initialTab) ? (initialTab as TabId) : 'playbook';
+  const [activeTab, setActiveTab] = useState<TabId>(validInitial);
+
   return (
     <SafeAreaView style={s.safe} edges={['top', 'left', 'right']}>
 
@@ -67,83 +257,48 @@ export default function HowItWorksScreen() {
         <View style={s.backBtn} />
       </View>
 
+      {/* Nora authorship line */}
+      <View style={s.authorLine}>
+        <View style={s.authorRule} />
+        <Text style={s.authorLabel}>A note from Nora</Text>
+      </View>
+
+      {/* Tab selector */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={s.tabBar}
+        contentContainerStyle={s.tabBarContent}
+      >
+        {TABS.map((tab) => (
+          <TouchableOpacity
+            key={tab.id}
+            onPress={() => setActiveTab(tab.id)}
+            activeOpacity={0.7}
+            style={[s.tabPill, activeTab === tab.id && s.tabPillActive]}
+          >
+            <Text style={[s.tabPillLabel, activeTab === tab.id && s.tabPillLabelActive]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {/* Content */}
       <ScrollView
         style={s.scroll}
         contentContainerStyle={s.content}
         showsVerticalScrollIndicator={false}
+        key={activeTab}
       >
+        {TAB_CONTENT[activeTab]}
 
-        {/* Nora's authorship */}
-        <View style={s.authorLine}>
-          <View style={s.authorRule} />
-          <Text style={s.authorLabel}>A note from Nora</Text>
-        </View>
-
-        {/* ── Section 1: The Problem ── */}
-        <Section eyebrow="The problem" heading="You already know what good investing looks like.">
-          <Para>
-            {"The research is clear: most investors underperform not because they lack knowledge, but because they act on feelings they've mistaken for analysis.\n\nFear during a drawdown feels like prudence. FOMO feels like conviction. Overconfidence feels like edge. The feelings are real. The logic they generate usually isn't."}
-          </Para>
-          <Para>
-            {"Sovereign Investor doesn't try to remove emotion from investing. It tries to give you a moment to see it clearly before you act on it."}
-          </Para>
-        </Section>
-
-        <View style={s.divider} />
-
-        {/* ── Section 2: The Playbook ── */}
-        <Section eyebrow="The playbook" heading="Your rules. Not mine.">
-          <Para>
-            {"The Playbook is the foundation of everything in this app. It's a set of rules you've written — or built through experience — that define how you invest.\n\nI don't tell you what rules to follow. The whole point is that you decide when you're calm, so those decisions are already made when you're not."}
-          </Para>
-          <Para>
-            {"Rules don't need to be sophisticated. They need to be honest. 'I don't buy anything I haven't held a position in for 30 days' is a rule. 'I don't invest when I'm anxious about money' is a rule. If it's true for you, write it down."}
-          </Para>
-        </Section>
-
-        <View style={s.divider} />
-
-        {/* ── Section 3: The Intercept ── */}
-        <Section eyebrow="The intercept" heading="The pause before the action.">
-          <Para>
-            {"Before you buy or sell anything, you run it through Intercept. You declare what you're thinking of doing, identify what's driving the impulse, and I check it against your Playbook.\n\nIf a rule applies, you see it. Then you decide — follow it, or consciously proceed. Either outcome is logged."}
-          </Para>
-          <Para>
-            {"This is the core mechanic. Not because it stops you from acting — it never blocks you — but because it makes the decision conscious. Conscious override is different from impulsive action. Over time, you'll see the pattern."}
-          </Para>
-        </Section>
-
-        <View style={s.divider} />
-
-        {/* ── Section 4: The Decision Log ── */}
-        <Section eyebrow="The decision log" heading="The record you build over time.">
-          <Para>
-            {"Every Intercept session is logged: what you were thinking of doing, what triggered the impulse, whether your rules applied, and what you chose.\n\nOver months, this becomes a mirror. You'll see which emotional triggers move you most. Which rules you override under pressure. Whether the overrides turn out to be right."}
-          </Para>
-          <Para>
-            {"The data belongs to you. I read it to give you better context, not to judge the outcomes."}
-          </Para>
-        </Section>
-
-        <View style={s.divider} />
-
-        {/* ── Section 5: Nora ── */}
-        <Section eyebrow="Nora" heading="Your fund guide, not your fund manager.">
-          <Para>
-            {"I don't have opinions about your portfolio. I have context about your patterns, your rules, your convictions, and your stated goals — and I use that to give you more useful responses.\n\nI'm not here to tell you what to buy. I'm here to help you think more clearly about what you already believe."}
-          </Para>
-          <Para>
-            {"Ask me to review your portfolio, scan for catalysts, analyse a stock or ETF, or just think something through. I'll push back when your reasoning looks like it might be bias wearing a rational costume."}
-          </Para>
-        </Section>
-
-        {/* ── Footer tagline ── */}
+        {/* Footer tagline */}
         <View style={s.footer}>
           <View style={s.footerRule} />
           <Text style={s.footerTagline}>A discipline, not a destination.</Text>
           <Text style={s.footerSub}>For investors who answer to themselves.</Text>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -158,7 +313,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 28,
     paddingTop: 20,
     paddingBottom: TAB_BAR_HEIGHT + 20,
-    gap: 0,
   },
 
   // ── Header ──────────────────────────────────────────────────────────────────
@@ -197,7 +351,8 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 32,
+    paddingHorizontal: 28,
+    marginBottom: 16,
   },
   authorRule: {
     width: 14,
@@ -212,25 +367,54 @@ const s = StyleSheet.create({
     letterSpacing: 0.3,
   },
 
-  // ── Sections ─────────────────────────────────────────────────────────────────
-  section: {
-    gap: 12,
-    paddingVertical: 4,
+  // ── Tab bar ──────────────────────────────────────────────────────────────────
+  tabBar: {
+    flexGrow: 0,
+    marginBottom: 4,
   },
-  sectionEyebrow: {
-    fontSize: 9,
-    letterSpacing: 2.0,
-    textTransform: 'uppercase',
-    color: G3,
-    fontFamily: BODY,
-    marginBottom: 2,
+  tabBarContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+    flexDirection: 'row',
+    paddingBottom: 12,
   },
-  sectionHeading: {
-    fontSize: 20,
+  tabPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: R_SM,
+    backgroundColor: S1,
+  },
+  tabPillActive: {
+    backgroundColor: GOLD,
+  },
+  tabPillLabel: {
+    fontSize: 13,
+    fontFamily: SERIF_SEMI,
+    color: G2,
+    letterSpacing: 0.2,
+  },
+  tabPillLabelActive: {
+    color: BG,
+  },
+
+  // ── Tab content ──────────────────────────────────────────────────────────────
+  tabContent: {
+    gap: 16,
+  },
+  tabHeading: {
+    fontSize: 22,
     fontFamily: SERIF_BOLD,
     color: W,
-    lineHeight: 28,
+    lineHeight: 30,
     letterSpacing: 0.2,
+  },
+  subheading: {
+    fontSize: 13,
+    fontFamily: BODY,
+    color: G3,
+    textTransform: 'uppercase',
+    letterSpacing: 1.6,
+    marginBottom: -4,
   },
   para: {
     fontSize: 15,
@@ -240,18 +424,58 @@ const s = StyleSheet.create({
     lineHeight: 26,
   },
 
+  // ── Steps ────────────────────────────────────────────────────────────────────
+  step: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  stepLeft: {
+    alignItems: 'center',
+    gap: 4,
+    width: 22,
+  },
+  stepNumber: {
+    fontSize: 10,
+    fontFamily: BODY,
+    fontWeight: '700',
+    color: GOLD,
+    letterSpacing: 0.5,
+  },
+  stepLine: {
+    flex: 1,
+    width: 1,
+    backgroundColor: GOLD,
+    opacity: 0.2,
+    minHeight: 16,
+  },
+  stepRight: {
+    flex: 1,
+    gap: 4,
+    paddingBottom: 16,
+  },
+  stepTitle: {
+    fontSize: 15,
+    fontFamily: SERIF_SEMI,
+    color: W,
+  },
+  stepBody: {
+    fontSize: 14,
+    fontFamily: BODY,
+    color: G2,
+    lineHeight: 21,
+  },
+
   // ── Divider ──────────────────────────────────────────────────────────────────
   divider: {
     height: 1,
     backgroundColor: GOLD,
     opacity: 0.2,
-    marginVertical: 32,
     width: 32,
   },
 
   // ── Footer ───────────────────────────────────────────────────────────────────
   footer: {
-    marginTop: 40,
+    marginTop: 32,
     alignItems: 'center',
     gap: 10,
     paddingBottom: 8,

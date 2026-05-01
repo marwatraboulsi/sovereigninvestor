@@ -78,13 +78,14 @@ function Chevron({ open, color = G3 }: { open: boolean; color?: string }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface RuleCardProps {
-  rule:        PlaybookRule;
-  expanded?:   boolean;           // controlled; if undefined → self-managed
-  onPress?:    () => void;        // optional external handler
-  dimmed?:     boolean;           // paused/removed rules
+  rule:         PlaybookRule;
+  expanded?:    boolean;          // controlled; if undefined → self-managed
+  onPress?:     () => void;       // optional external handler
+  onLongPress?: () => void;       // long-press for contextual actions (edit/pause/delete)
+  dimmed?:      boolean;          // paused/removed rules
 }
 
-export function RuleCard({ rule, expanded: controlledExpanded, onPress, dimmed = false }: RuleCardProps) {
+export function RuleCard({ rule, expanded: controlledExpanded, onPress, onLongPress, dimmed = false }: RuleCardProps) {
   const [selfExpanded, setSelfExpanded] = useState(false);
   const isExpanded = controlledExpanded !== undefined ? controlledExpanded : selfExpanded;
 
@@ -105,6 +106,7 @@ export function RuleCard({ rule, expanded: controlledExpanded, onPress, dimmed =
   return (
     <TouchableOpacity
       onPress={handlePress}
+      onLongPress={onLongPress}
       activeOpacity={0.7}
       style={[s.card, isExpanded && s.cardExpanded, dimmed && s.cardDimmed]}
     >

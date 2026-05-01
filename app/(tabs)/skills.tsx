@@ -51,9 +51,14 @@ export default function SkillsScreen() {
       <View style={s.header}>
         <View style={s.headerRow}>
           <Text style={s.headerTitle}>Research</Text>
-          <TouchableOpacity onPress={() => router.push('/saved-research')} activeOpacity={0.6}>
-            <Text style={s.savedBtn}>Saved Research</Text>
-          </TouchableOpacity>
+          <View style={s.headerActions}>
+            <TouchableOpacity onPress={() => router.push({ pathname: '/how-it-works', params: { tab: 'research' } })} activeOpacity={0.6} style={s.infoBtn}>
+              <Text style={s.infoBtnText}>?</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/saved-research')} activeOpacity={0.6}>
+              <Text style={s.savedBtn}>Saved Research</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <Text style={s.headerSub}>Pick a tool and tell me what you want to analyse. I'll run a deep, structured research session tailored to your question.</Text>
       </View>
@@ -100,8 +105,11 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   headerTitle: { fontSize: 28, fontFamily: SERIF_BOLD, color: W, letterSpacing: 0.2 },
   savedBtn:    { fontSize: 12, color: G2, fontFamily: BODY },
+  infoBtn:     { padding: 2 },
+  infoBtnText: { fontSize: 14, color: G2, fontFamily: BODY, fontWeight: '600' },
   headerSub:   { fontSize: 14, color: G1, marginTop: 6, lineHeight: 22, fontFamily: BODY, fontStyle: 'italic' },
 
   scroll:  { flex: 1 },

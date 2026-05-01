@@ -11,6 +11,7 @@ import type { MacroConviction, PlaybookRule, RuleCategory, Conviction, Convictio
 import { seedPlaybookOnFirstLogin } from '@/utils/seedPlaybookOnFirstLogin';
 import { CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
 import { RuleWizard } from '@/components/RuleWizard';
+import { RuleCard } from '@/components/RuleCard';
 
 import { BG, BG_DEEP, S1, S2, S_HIGH, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, SERIF_SEMI, BODY, R, R_SM, R_LG, TAB_BAR_HEIGHT } from '@/theme';
 import { useGuest } from '@/contexts/GuestContext';
@@ -393,8 +394,13 @@ export default function ProfileScreen() {
       />
 
       <View style={s.header}>
-        <Text style={s.headerTitle}>Profile</Text>
-        <Text style={s.headerSub}>This is your mandate. The more I know about you, the better I can guide you in a way that actually fits your life.</Text>
+        <View style={s.headerRow}>
+          <Text style={s.headerTitle}>Profile</Text>
+          <TouchableOpacity onPress={() => router.push('/how-it-works')} activeOpacity={0.6} style={s.headerInfoBtn}>
+            <Text style={s.headerInfoBtnText}>?</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={s.headerSub}>Your mandate, your rules, your worldview. The more defined this is, the sharper your Guide becomes.</Text>
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
@@ -512,51 +518,126 @@ export default function ProfileScreen() {
           </Pressable>
         </Modal>
 
-        {/* Preferences */}
-        <View style={s.section}>
-          <Text style={s.sectionLabel}>Your Mandate</Text>
-          <View style={s.list}>
-            {rows.map((row, i) => (
-              <TouchableOpacity
-                key={row.label}
-                style={[s.row, i < rows.length - 1 && s.rowBorder]}
-                onPress={() => setEditingField(row.field)}
-                activeOpacity={0.6}
-              >
-                <Text style={s.rowLabel}>{row.label}</Text>
-                <View style={s.rowRight}>
-                  <Text style={s.rowValue}>{row.value}</Text>
-                  <Text style={s.rowChevron}>›</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+        {/* ── 1. How it works — top card ───────────────────────────────────── */}
+        <TouchableOpacity
+          style={s.howItWorksCard}
+          onPress={() => router.push('/how-it-works')}
+          activeOpacity={0.75}
+        >
+          <View style={s.howItWorksCardAccent} />
+          <View style={s.howItWorksCardInner}>
+            <Text style={s.howItWorksCardEyebrow}>The System</Text>
+            <Text style={s.howItWorksCardTitle}>How it works</Text>
+            <Text style={s.howItWorksCardSub}>
+              The Playbook, the Intercept, the Decision Log — explained in plain language.
+            </Text>
           </View>
+          <Text style={s.howItWorksCardChevron}>›</Text>
+        </TouchableOpacity>
+
+        {/* ── 2. My Playbook ───────────────────────────────────────────────── */}
+        <View style={s.section}>
+          <View style={s.playbookHeader}>
+            <Text style={s.sectionLabel}>My Playbook</Text>
+            <TouchableOpacity onPress={openAddRule} activeOpacity={0.6} style={s.addRuleBtn}>
+              <Text style={s.addRuleBtnText}>+ Add Rule</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={s.sectionSub}>
+            Tap a rule to see its origin and the bias it guards against. Long-press to edit or pause.
+          </Text>
+
+          {rulesLoaded && visibleRules.length === 0 ? (
+            <View style={s.playbookEmpty}>
+              <Text style={s.playbookEmptyText}>
+                Your playbook is empty. Run your first Intercept session to start building it automatically, or tap + Add Rule to write one now.
+              </Text>
+            </View>
+          ) : (
+            <View style={s.ruleList}>
+              {Object.entries(rulesByCategory).map(([cat, catRules]) => (
+                <View key={cat} style={s.playbookGroup}>
+                  <Text style={s.playbookGroupLabel}>
+                    {CATEGORY_LABEL[cat as RuleCategory] ?? cat}
+                  </Text>
+                  {catRules.map((rule) => (
+                    <RuleCard
+                      key={rule.id}
+                      rule={rule}
+                      expanded={expandedRules.has(rule.id)}
+                      onPress={() => toggleExpanded(rule.id)}
+                      onLongPress={() => handleRuleTap(rule)}
+                      dimmed={rule.status === 'paused'}
+                    />
+                  ))}
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
-        {/* Worldview */}
+        {/* ── 3. Convictions & Worldview ───────────────────────────────────── */}
         <View style={s.section}>
-          <Text style={s.sectionLabel}>Your Worldview</Text>
+          <Text style={s.sectionLabel}>Convictions & Worldview</Text>
           <Text style={s.sectionSub}>
-            Entirely optional. Select any convictions that resonate with how you see the world right now. Your Guide holds these lightly as background context and may draw connections where relevant, without validating or opposing them. Your worldview can evolve, and so can this.
+            Your beliefs about the world — built through Research, the Intercept, and your own thinking. Your Guide holds these as background context.
           </Text>
-          <View style={s.convictionGrid}>
-            {MACRO_CONVICTIONS.map((c) => {
-              const active = convictions.includes(c.id);
-              return (
-                <TouchableOpacity
-                  key={c.id}
-                  style={[s.convictionCard, active && s.convictionCardActive]}
-                  onPress={() => toggleConviction(c.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={s.convictionHeader}>
-                    <Text style={[s.convictionLabel, active && s.convictionLabelActive]}>{c.label}</Text>
-                    {active && <View style={s.convictionDot} />}
-                  </View>
-                  <Text style={s.convictionDesc}>{c.description}</Text>
-                </TouchableOpacity>
-              );
-            })}
+
+          {/* Conviction records (from Research / Intercept) */}
+          {convictionsLoaded && convictionRecords.length > 0 && (
+            <View style={s.playbookGroup}>
+              <Text style={s.playbookGroupLabel}>From Research & Intercept</Text>
+              {(['yes', 'still-forming', 'no'] as ConvictionBelief[]).map((belief) => {
+                const group = convictionRecords.filter((c) => c.belief === belief);
+                if (group.length === 0) return null;
+                return group.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={s.convRecordCard}
+                    onPress={() => handleConvictionTap(c)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={s.convRecordTop}>
+                      <View style={[s.beliefDot, belief === 'yes' ? s.beliefDotGreen : belief === 'no' ? s.beliefDotRed : s.beliefDotAmber]} />
+                      <Text style={s.convRecordLabel} numberOfLines={1}>
+                        {CONVICTION_THEME_LABEL[c.theme]}
+                      </Text>
+                      <View style={[s.confBadge, c.confidence === 'high' ? s.confBadgeHigh : c.confidence === 'low' ? s.confBadgeLow : s.confBadgeMed]}>
+                        <Text style={s.confBadgeText}>{c.confidence}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={14} color={G2} />
+                    </View>
+                    {c.note ? (
+                      <Text style={s.convRecordNote} numberOfLines={2}>{c.note}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                ));
+              })}
+            </View>
+          )}
+
+          {/* Macro theses — background worldview */}
+          <View style={s.playbookGroup}>
+            <Text style={s.playbookGroupLabel}>Background Theses</Text>
+            <View style={s.convictionGrid}>
+              {MACRO_CONVICTIONS.map((c) => {
+                const active = convictions.includes(c.id);
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[s.convictionCard, active && s.convictionCardActive]}
+                    onPress={() => toggleConviction(c.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={s.convictionHeader}>
+                      <Text style={[s.convictionLabel, active && s.convictionLabelActive]}>{c.label}</Text>
+                      {active && <View style={s.convictionDot} />}
+                    </View>
+                    <Text style={s.convictionDesc}>{c.description}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
           {/* Free-text note */}
@@ -581,147 +662,28 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* How it works */}
+        {/* ── 4. Your Mandate ──────────────────────────────────────────────── */}
         <View style={s.section}>
-          <Text style={s.sectionLabel}>How your profile shapes responses</Text>
-          <View style={s.infoList}>
-            {[
-              'Knowledge level adjusts depth, terminology, and pacing. From foundational explanations to assumed fluency.',
-              'Investment status and primary goal help your Guide understand where you are in your journey and what kind of guidance is most useful right now.',
-              'Age range and risk tolerance inform how your Guide frames trade-offs, time horizons, and the balance between growth and capital preservation.',
-              'Response style controls length and structure. From concise conversational answers to thorough, structured deep dives.',
-              'Worldview convictions are held as background context. Your Guide may connect relevant analysis to them, but stays objective and does not build every response around them.',
-            ].map((text, i, arr) => (
-              <View key={i} style={[s.infoRow, i < arr.length - 1 && s.rowBorder]}>
-                <Text style={s.infoText}>{text}</Text>
-              </View>
+          <Text style={s.sectionLabel}>Your Mandate</Text>
+          <Text style={s.sectionSub}>
+            Shapes how your Guide responds — depth, framing, time horizons, and tone.
+          </Text>
+          <View style={s.list}>
+            {rows.map((row, i) => (
+              <TouchableOpacity
+                key={row.label}
+                style={[s.row, i < rows.length - 1 && s.rowBorder]}
+                onPress={() => setEditingField(row.field)}
+                activeOpacity={0.6}
+              >
+                <Text style={s.rowLabel}>{row.label}</Text>
+                <View style={s.rowRight}>
+                  <Text style={s.rowValue}>{row.value}</Text>
+                  <Text style={s.rowChevron}>›</Text>
+                </View>
+              </TouchableOpacity>
             ))}
           </View>
-        </View>
-
-        {/* ── How it works ────────────────────────────────────────────────── */}
-        <TouchableOpacity
-          style={s.howItWorksRow}
-          onPress={() => router.push('/how-it-works')}
-          activeOpacity={0.7}
-        >
-          <View style={s.howItWorksLeft}>
-            <Text style={s.howItWorksLabel}>How it works</Text>
-            <Text style={s.howItWorksSub}>The behavioral architecture, in plain language</Text>
-          </View>
-          <Text style={s.howItWorksChevron}>›</Text>
-        </TouchableOpacity>
-
-        {/* ── My Playbook ─────────────────────────────────────────────────── */}
-        <View style={s.section}>
-          <View style={s.playbookHeader}>
-            <Text style={s.sectionLabel}>My Playbook</Text>
-            <TouchableOpacity onPress={openAddRule} activeOpacity={0.6} style={s.addRuleBtn}>
-              <Text style={s.addRuleBtnText}>+ Add Rule</Text>
-            </TouchableOpacity>
-          </View>
-
-          {rulesLoaded && visibleRules.length === 0 ? (
-            <View style={s.playbookEmpty}>
-              <Text style={s.playbookEmptyText}>
-                Your playbook is empty. Run your first Intercept session to start building it.
-              </Text>
-            </View>
-          ) : (
-            Object.entries(rulesByCategory).map(([cat, catRules]) => (
-              <View key={cat} style={s.playbookGroup}>
-                <Text style={s.playbookGroupLabel}>
-                  {CATEGORY_LABEL[cat as RuleCategory] ?? cat}
-                </Text>
-                {catRules.map((rule) => {
-                  const expanded = expandedRules.has(rule.id);
-                  return (
-                    <TouchableOpacity
-                      key={rule.id}
-                      style={s.ruleCard}
-                      onPress={() => handleRuleTap(rule)}
-                      onLongPress={() => toggleExpanded(rule.id)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={s.ruleCardTop}>
-                        <Text style={[s.ruleTitle, rule.status === 'paused' && s.ruleTitlePaused]}>
-                          {rule.title}
-                        </Text>
-                        <View style={s.ruleMeta}>
-                          {rule.status === 'paused' && (
-                            <View style={s.pausedBadge}>
-                              <Text style={s.pausedBadgeText}>Paused</Text>
-                            </View>
-                          )}
-                          <Text style={s.ruleDate}>{formatRelativeDate(rule.createdAt)}</Text>
-                        </View>
-                      </View>
-                      <Text
-                        style={s.ruleBody}
-                        numberOfLines={expanded ? undefined : 2}
-                      >
-                        {rule.body}
-                      </Text>
-                      {rule.overrideCount > 0 && (
-                        <Text style={s.overrideCount}>
-                          Overridden {rule.overrideCount} time{rule.overrideCount !== 1 ? 's' : ''}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* ── Convictions ──────────────────────────────────────────────────── */}
-        <View style={s.section}>
-          <Text style={s.sectionLabel}>Convictions</Text>
-          <Text style={s.sectionSub}>
-            Your macro beliefs, built up through Research, Learn Mode, and the Intercept. Tap any conviction to edit or remove it.
-          </Text>
-
-          {convictionsLoaded && convictionRecords.length === 0 ? (
-            <View style={s.playbookEmpty}>
-              <Text style={s.playbookEmptyText}>
-                Your convictions will build here as you use the app — through Research, Learn Mode, and the Intercept.
-              </Text>
-            </View>
-          ) : (
-            (['yes', 'still-forming', 'no'] as ConvictionBelief[]).map((belief) => {
-              const group = convictionRecords.filter((c) => c.belief === belief);
-              if (group.length === 0) return null;
-              const groupLabel = belief === 'yes' ? 'I believe this' : belief === 'no' ? 'I don\'t believe this' : 'Still thinking';
-              return (
-                <View key={belief} style={s.playbookGroup}>
-                  <Text style={s.playbookGroupLabel}>{groupLabel}</Text>
-                  {group.map((c) => (
-                    <TouchableOpacity
-                      key={c.id}
-                      style={s.convRecordCard}
-                      onPress={() => handleConvictionTap(c)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={s.convRecordTop}>
-                        <View style={[s.beliefDot, belief === 'yes' ? s.beliefDotGreen : belief === 'no' ? s.beliefDotRed : s.beliefDotAmber]} />
-                        <Text style={s.convRecordLabel} numberOfLines={1}>
-                          {CONVICTION_THEME_LABEL[c.theme]}
-                        </Text>
-                        <View style={[s.confBadge, c.confidence === 'high' ? s.confBadgeHigh : c.confidence === 'low' ? s.confBadgeLow : s.confBadgeMed]}>
-                          <Text style={s.confBadgeText}>{c.confidence}</Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={14} color={G2} />
-                      </View>
-                      {c.note ? (
-                        <Text style={s.convRecordNote} numberOfLines={2}>{c.note}</Text>
-                      ) : null}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              );
-            })
-          )}
         </View>
 
         {/* ── Footer links ─────────────────────────────────────────────────── */}
@@ -771,9 +733,29 @@ const s = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 16,
+    gap: 8,
   },
-  headerTitle: { fontSize: 11, fontWeight: '500', color: G2, textTransform: 'uppercase', letterSpacing: 2.2, fontFamily: BODY, marginBottom: 10 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerTitle: { fontSize: 11, fontWeight: '500', color: G2, textTransform: 'uppercase', letterSpacing: 2.2, fontFamily: BODY },
   headerSub:   { fontFamily: SERIF, fontStyle: 'italic', fontSize: 14, color: G1, lineHeight: 21 },
+  headerInfoBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: S1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerInfoBtnText: {
+    fontSize: 13,
+    color: G2,
+    fontFamily: BODY,
+    fontWeight: '600',
+  },
 
   scroll:   { flex: 1 },
   content:  { padding: 24, gap: 36, paddingBottom: TAB_BAR_HEIGHT },
@@ -931,36 +913,55 @@ const s = StyleSheet.create({
   confBadgeLow:  { backgroundColor: 'transparent', borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
   confBadgeText: { fontSize: 10, fontWeight: '700', color: G2, textTransform: 'uppercase', letterSpacing: 0.4 },
 
-  // ── How it works ─────────────────────────────────────────────────────────
-  howItWorksRow: {
+  // ── How it works card ─────────────────────────────────────────────────────
+  howItWorksCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: S1,
     borderRadius: R,
-    padding: 16,
-    paddingHorizontal: 18,
+    overflow: 'hidden',
   },
-  howItWorksLeft: {
+  howItWorksCardAccent: {
+    width: 3,
+    alignSelf: 'stretch',
+    backgroundColor: GOLD,
+  },
+  howItWorksCardInner: {
     flex: 1,
+    padding: 16,
+    paddingLeft: 14,
     gap: 3,
   },
-  howItWorksLabel: {
-    fontSize: 15,
-    fontFamily: SERIF_SEMI,
-    color: W,
+  howItWorksCardEyebrow: {
+    fontSize: 9,
+    fontFamily: BODY,
+    color: GOLD,
+    textTransform: 'uppercase',
+    letterSpacing: 1.8,
   },
-  howItWorksSub: {
+  howItWorksCardTitle: {
+    fontSize: 17,
+    fontFamily: SERIF_BOLD,
+    color: W,
+    letterSpacing: 0.2,
+  },
+  howItWorksCardSub: {
     fontSize: 12,
     fontFamily: BODY,
     fontStyle: 'italic',
     color: G2,
+    lineHeight: 17,
+    marginTop: 2,
   },
-  howItWorksChevron: {
-    fontSize: 20,
+  howItWorksCardChevron: {
+    fontSize: 22,
     color: G3,
     fontFamily: BODY,
+    paddingRight: 14,
   },
+
+  // ── Rule list ─────────────────────────────────────────────────────────────
+  ruleList: { gap: 0 },
 
   // ─────────────────────────────────────────────────────────────────────────
   footerLinks:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },

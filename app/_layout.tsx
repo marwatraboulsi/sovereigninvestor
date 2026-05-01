@@ -67,6 +67,7 @@ function RootLayoutInner() {
         <Stack.Screen name="extended-profile"  options={{ headerShown: false }} />
         <Stack.Screen name="orientation"       options={{ headerShown: false }} />
         <Stack.Screen name="how-it-works"      options={{ headerShown: false }} />
+        <Stack.Screen name="skill/[id]"        options={{ headerShown: true, gestureEnabled: true }} />
       </Stack>
     </>
   );

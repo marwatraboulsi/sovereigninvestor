@@ -587,7 +587,9 @@ function InterceptWizard() {
               <Ionicons name="close" size={20} color={G2} />
             </TouchableOpacity>
           ) : (
-            <View style={s.backBtn} />
+            <TouchableOpacity onPress={() => router.push({ pathname: '/how-it-works', params: { tab: 'intercept' } })} activeOpacity={0.6} style={s.backBtn}>
+              <Text style={s.headerInfoText}>?</Text>
+            </TouchableOpacity>
           )}
         </View>
 
@@ -1339,7 +1341,8 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  backBtn:    { width: 32, alignItems: 'center' },
+  backBtn:        { width: 32, alignItems: 'center' },
+  headerInfoText: { fontSize: 14, color: G2, fontFamily: BODY, fontWeight: '600' },
   headerTitle: { fontSize: 22, fontFamily: SERIF_BOLD, color: W, letterSpacing: 0.2 },
   headerSub:  { fontSize: 14, color: G1, fontFamily: BODY, fontStyle: 'italic', textAlign: 'center', lineHeight: 20 },
 

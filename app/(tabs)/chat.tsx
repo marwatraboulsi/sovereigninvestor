@@ -235,6 +235,9 @@ export default function ChatScreen() {
             <Text style={s.headerTitle}>Nora.</Text>
           </View>
           <View style={s.headerActions}>
+            <TouchableOpacity onPress={() => router.push({ pathname: '/how-it-works', params: { tab: 'chat' } })} activeOpacity={0.6} style={s.headerIconBtn}>
+              <Text style={s.headerInfoText}>?</Text>
+            </TouchableOpacity>
             {!isGuest && (
               <TouchableOpacity onPress={() => router.push('/conversations')} activeOpacity={0.6} style={s.headerIconBtn}>
                 <Ionicons name="time-outline" size={18} color={G2} />
@@ -496,6 +499,7 @@ const s = StyleSheet.create({
   headerSub:     { fontFamily: SERIF, fontStyle: 'italic', fontSize: 13, color: G1, marginTop: 8, lineHeight: 20, maxWidth: 290 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 4 },
   headerIconBtn: { padding: 4 },
+  headerInfoText: { fontSize: 14, color: G2, fontFamily: BODY, fontWeight: '600' },
   newChatBtn:    { paddingHorizontal: 10, paddingVertical: 4, borderRadius: R_SM, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
   newChatText:   { fontSize: 11, color: G2, letterSpacing: 0.5 },
 

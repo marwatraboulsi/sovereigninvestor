@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useState, useCallback, useMemo } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useVaultAuth } from '@/hooks/useVaultAuth';
 import { useLivePrices } from '@/hooks/useLivePrices';
@@ -689,15 +689,20 @@ export default function VaultScreen() {
             <View>
               <Text style={s.headerTitle}>The Vault</Text>
             </View>
-            <TouchableOpacity
-              style={s.saveBtn}
-              onPress={isGuest ? () => setShowAccountModal(true) : handleSave}
-              activeOpacity={0.8}
-            >
-              <Text style={s.saveBtnText}>
-                {isGuest ? 'Sign up to save' : (saved ? 'Saved ✓' : 'Save')}
-              </Text>
-            </TouchableOpacity>
+            <View style={s.headerActions}>
+              <TouchableOpacity onPress={() => router.push({ pathname: '/how-it-works', params: { tab: 'vault' } })} activeOpacity={0.6} style={s.infoBtn}>
+                <Text style={s.infoBtnText}>?</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.saveBtn}
+                onPress={isGuest ? () => setShowAccountModal(true) : handleSave}
+                activeOpacity={0.8}
+              >
+                <Text style={s.saveBtnText}>
+                  {isGuest ? 'Sign up to save' : (saved ? 'Saved ✓' : 'Save')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
           <Text style={s.headerSub}>Your holdings, your way. Add positions and I'll track everything.</Text>
         </View>
@@ -869,8 +874,11 @@ const s = StyleSheet.create({
   headerRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  headerTitle: { fontSize: 28, fontFamily: SERIF_BOLD, color: W, letterSpacing: 0.2 },
-  headerSub:   { fontSize: 14, color: G1, marginTop: 6, lineHeight: 22, fontFamily: BODY, fontStyle: 'italic' },
+  headerTitle:   { fontSize: 28, fontFamily: SERIF_BOLD, color: W, letterSpacing: 0.2 },
+  headerSub:     { fontSize: 14, color: G1, marginTop: 6, lineHeight: 22, fontFamily: BODY, fontStyle: 'italic' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  infoBtn:       { padding: 2 },
+  infoBtnText:   { fontSize: 14, color: G2, fontFamily: BODY, fontWeight: '600' },
   saveBtn:     { backgroundColor: GOLD, paddingHorizontal: 16, paddingVertical: 8, borderRadius: R_SM },
   saveBtnText: { color: ON_PRIMARY, fontSize: 13, fontFamily: SERIF_BOLD },
 
