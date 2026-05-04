@@ -3,10 +3,16 @@
  *
  * Proxies requests to Anthropic's API so that the API key never leaves the server.
  * The client authenticates using a Supabase session token (or anon key).
+ *
+ * For streaming responses, we manually pipe chunks rather than returning
+ * upstream.body directly. This lets us inject SSE comment heartbeats every
+ * 25 seconds, which prevents iOS from dropping the TCP connection during
+ * silent periods (e.g. while Anthropic executes a server-side web search).
  */
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
+const HEARTBEAT_INTERVAL_MS = 25_000;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -55,11 +61,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const isStreaming = body.stream === true;
-
-  // Forward anthropic-version from client or use default
   const anthropicVersion = req.headers.get('anthropic-version') ?? API_VERSION;
-
-  // Optional beta header from env
   const betaHeader = Deno.env.get('ANTHROPIC_BETA');
 
   const anthropicHeaders: Record<string, string> = {
@@ -79,8 +81,44 @@ Deno.serve(async (req: Request) => {
     });
 
     if (isStreaming) {
-      // SSE passthrough — pipe the response body directly back to the client
-      return new Response(upstream.body, {
+      // ── Streaming: pipe with heartbeats ─────────────────────────────────
+      // Instead of returning upstream.body directly, we use a TransformStream
+      // to inject SSE comment heartbeats every 25 seconds. This keeps the iOS
+      // TCP connection alive during the silent periods when Anthropic is
+      // executing server-side web search tool calls (which produce no bytes).
+      const encoder = new TextEncoder();
+      const heartbeat = encoder.encode(': heartbeat\n\n');
+
+      const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+      const writer = writable.getWriter();
+
+      // Heartbeat timer — fires while we're still piping
+      let done = false;
+      const heartbeatTimer = setInterval(async () => {
+        if (!done) {
+          try { await writer.write(heartbeat); } catch { /* writer closed */ }
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+
+      // Pipe upstream → writable in the background
+      (async () => {
+        try {
+          const reader = upstream.body!.getReader();
+          while (true) {
+            const { value, done: streamDone } = await reader.read();
+            if (streamDone) break;
+            await writer.write(value);
+          }
+        } catch {
+          // Upstream closed unexpectedly — nothing to do
+        } finally {
+          done = true;
+          clearInterval(heartbeatTimer);
+          writer.close().catch(() => {});
+        }
+      })();
+
+      return new Response(readable, {
         status: upstream.status,
         headers: {
           ...CORS_HEADERS,

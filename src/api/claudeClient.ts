@@ -460,10 +460,16 @@ export function streamClaude(
   // If the connection silently drops (common on mobile during long web searches),
   // neither onerror nor ontimeout may fire. We detect this by tracking how long
   // it has been since the last onprogress event.
+  //
+  // The stall window is generous because Anthropic goes completely silent on the
+  // SSE stream while executing server-side web search tool calls — which can
+  // take 60–120 seconds for complex multi-source queries. Firing too early is
+  // worse than waiting: it forces a full restart of the analysis.
   let lastProgressMs = Date.now();
   let hasReceivedFirstByte = false;
+  const STALL_TIMEOUT_MS = 150_000; // 2.5 min — covers slow web search tool calls
   const stallIntervalId = setInterval(() => {
-    if (hasReceivedFirstByte && Date.now() - lastProgressMs > 60_000) {
+    if (hasReceivedFirstByte && Date.now() - lastProgressMs > STALL_TIMEOUT_MS) {
       if (!settled) {
         settled = true;
         cleanup();
@@ -471,7 +477,7 @@ export function streamClaude(
         callbacks.onError(new Error('Connection lost. Please check your network and try again.'));
       }
     }
-  }, 10_000);
+  }, 15_000);
 
   function cleanup() {
     clearTimeout(hardTimeoutId);
