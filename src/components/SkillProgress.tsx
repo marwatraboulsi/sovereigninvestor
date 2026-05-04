@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { View, Text, Animated, StyleSheet } from 'react-native';
 import { SkillId } from '@/types';
-import { SKILL_METADATA } from '@/skills';
-import { GOLD, G1, G2, S1, LINE } from '@/theme';
+import { GOLD, G1, S1, LINE } from '@/theme';
 
 // Expected analysis durations in milliseconds (used for progress estimation)
 const EXPECTED_DURATIONS: Record<SkillId, number> = {
@@ -10,6 +9,40 @@ const EXPECTED_DURATIONS: Record<SkillId, number> = {
   'etf-analyzer':            40_000,
   'portfolio-reviewer':      35_000,
   'market-catalyst-scanner': 50_000,
+};
+
+// Time-based phase messages per skill.
+// Each entry is [threshold_percent, label].
+// The label shown is the last one whose threshold is <= current percent.
+const TIME_PHASES: Record<SkillId, Array<[number, string]>> = {
+  'etf-analyzer': [
+    [0,  'Pulling live fund data from multiple sources…'],
+    [25, 'Building your MACE scorecard…'],
+    [50, 'Analysing cost, efficiency, and market exposure…'],
+    [72, 'Running comparative analysis…'],
+    [88, 'Compiling your final scorecard and verdict…'],
+  ],
+  'portfolio-reviewer': [
+    [0,  'Loading your portfolio holdings…'],
+    [25, 'Analysing allocation and diversification…'],
+    [55, 'Evaluating risk profile and archetype fit…'],
+    [78, 'Building your recommendations…'],
+  ],
+  'market-catalyst-scanner': [
+    [0,  'Scanning live market data…'],
+    [22, 'Identifying catalysts across our five-category framework…'],
+    [50, 'Assessing impact, timing, and conviction levels…'],
+    [75, 'Compiling your catalyst report…'],
+  ],
+  'stock-researcher': [
+    [0,  'Researching company fundamentals…'],
+    [14, 'Pulling financial filings and earnings data…'],
+    [28, 'Analysing competitive position and moat…'],
+    [42, 'Scanning recent news and analyst coverage…'],
+    [58, 'Evaluating management quality and risk factors…'],
+    [72, 'Modelling valuation scenarios…'],
+    [86, 'Compiling your investment thesis…'],
+  ],
 };
 
 interface Props {
@@ -20,19 +53,21 @@ interface Props {
 
 /**
  * Shows a gold progress bar + percentage + current phase label while
- * Claude is streaming a skill analysis. The percentage is derived from
- * elapsed time against the expected duration (capped at 95% until done).
- * The phase label is extracted from `## ` or `**Phase` headings in the
- * streaming text so the user sees what Claude is working on.
+ * Claude is streaming a skill analysis.
+ *
+ * Phase label priority:
+ *  1. A heading detected in the streaming text (`## ` or `**Phase`)
+ *  2. A time-based label derived from elapsed % against expected duration
  */
 export function SkillProgress({ skillId, streamingText, elapsedMs }: Props) {
   const expectedDuration = EXPECTED_DURATIONS[skillId];
   const rawPercent = (elapsedMs / expectedDuration) * 100;
   const percent = Math.min(95, rawPercent);
 
-  // Detect current phase from streaming text
-  const currentPhase = detectPhase(streamingText);
-  const fallbackLabel = SKILL_METADATA[skillId].loadingMessage;
+  // Phase label: streaming text wins; fall back to time-based
+  const streamPhase = detectPhaseFromText(streamingText);
+  const timePhase   = detectPhaseFromTime(skillId, percent);
+  const phaseLabel  = streamPhase ?? timePhase;
 
   // Animated progress bar width
   const animWidth = useRef(new Animated.Value(0)).current;
@@ -55,7 +90,7 @@ export function SkillProgress({ skillId, streamingText, elapsedMs }: Props) {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.phaseLabel} numberOfLines={2}>
-          {currentPhase ?? fallbackLabel}
+          {phaseLabel}
         </Text>
         <Text style={styles.percent}>{Math.round(percent)}%</Text>
       </View>
@@ -69,7 +104,7 @@ export function SkillProgress({ skillId, streamingText, elapsedMs }: Props) {
 }
 
 /** Scan streaming text for the last `## ` or `**Phase` heading */
-function detectPhase(text: string): string | null {
+function detectPhaseFromText(text: string): string | null {
   if (!text) return null;
   const lines = text.split('\n');
   let lastPhase: string | null = null;
@@ -78,11 +113,20 @@ function detectPhase(text: string): string | null {
     if (trimmed.startsWith('## ')) {
       lastPhase = trimmed.replace(/^##\s*/, '');
     } else if (trimmed.startsWith('**Phase')) {
-      // e.g. **Phase 3: Competitive Moat**
       lastPhase = trimmed.replace(/^\*\*/, '').replace(/\*\*$/, '');
     }
   }
   return lastPhase;
+}
+
+/** Return the time-based phase label for the current progress percentage */
+function detectPhaseFromTime(skillId: SkillId, percent: number): string {
+  const phases = TIME_PHASES[skillId];
+  let label = phases[0][1];
+  for (const [threshold, msg] of phases) {
+    if (percent >= threshold) label = msg;
+  }
+  return label;
 }
 
 const styles = StyleSheet.create({
