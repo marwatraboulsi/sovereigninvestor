@@ -10,3 +10,5 @@ web-build/
 *.mobileprovision
 *.orig.*
 web-build/
+.DS_Store
+supabase/.temp/
