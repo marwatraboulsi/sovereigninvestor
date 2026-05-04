@@ -184,15 +184,36 @@ export function useSkillSession(skill: SkillId) {
               onError: (err) => {
                 abortRef.current = null;
 
-                // ── Retry logic for network errors ────────────────────────
                 const isNetworkError =
                   err instanceof Error && (
                     err.message.includes('Network error') ||
                     err.message.includes('Connection lost')
                   );
 
-                if (isNetworkError && retries < 2) {
-                  // Show a retrying message and try again after 2 seconds
+                // ── Salvage substantial partial responses ─────────────────
+                // iOS kills XHR connections when the app is backgrounded.
+                // If we already received a large portion of the response
+                // (>800 chars), accept it as complete rather than discarding
+                // all progress and restarting from scratch.
+                const currentStreamingText = getSession(skill).streamingText;
+                if (isNetworkError && currentStreamingText.length > 800) {
+                  const next = setSession(skill, (s) => ({
+                    messages: [...msgs, { role: 'assistant', content: s.streamingText }],
+                    streamingText: '',
+                    isLoading: false,
+                    error: null,
+                    startedAt: null,
+                  }));
+                  setStateInternal(next);
+                  persistMessages(skill, next.messages);
+                  return;
+                }
+
+                // ── Retry logic for early-stage network errors ────────────
+                if (isNetworkError && retries < 3) {
+                  // Wait longer on later retries to give iOS time to restore
+                  // the network connection after returning from background.
+                  const delayMs = retries === 0 ? 2000 : 5000;
                   const next = setSession(skill, (s) => ({
                     ...s,
                     error: 'Connection interrupted. Retrying…',
@@ -200,7 +221,7 @@ export function useSkillSession(skill: SkillId) {
                   setStateInternal(next);
                   setTimeout(() => {
                     startStream(msgs, timeout, etfTicker, retries + 1);
-                  }, 2000);
+                  }, delayMs);
                   return;
                 }
 
@@ -222,6 +243,7 @@ export function useSkillSession(skill: SkillId) {
                   streamingText: '',
                   isLoading: false,
                   error: errorMessage,
+                  startedAt: null,
                 }));
                 setStateInternal(next);
               },
