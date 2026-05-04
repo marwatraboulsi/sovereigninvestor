@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import { useSkillSession } from '@/hooks/useSkillSession';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
 import { useVaultData, formatPortfolioForReview } from '@/hooks/useVaultData';
@@ -22,6 +23,7 @@ import { saveAnalysisToArchive } from '@/hooks/useAnalysisArchive';
 import { SKILL_METADATA } from '@/skills';
 import { MessageBubble } from '@/components/MessageBubble';
 import { SkillOptionPicker } from '@/components/SkillOptionPicker';
+import { SkillProgress } from '@/components/SkillProgress';
 import { parseSkillMessage } from '@/utils/parseSkillOptions';
 import { detectThemeFromText, CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
 import type { SkillId, ConvictionTheme, ConvictionBelief } from '@/types';
@@ -64,6 +66,14 @@ function SkillScreenInner({ id }: { id: SkillId }) {
   const scrollRef = useRef<ScrollView>(null);
   const [input, setInput] = useState('');
 
+  // ── Progress tracking ──────────────────────────────────────────────────────
+  const [elapsedMs, setElapsedMs]   = useState(0);
+  const startTimeRef                = useRef<number | null>(null);
+  const elapsedIntervalRef          = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── Scroll-to-bottom button ────────────────────────────────────────────────
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
   const skill     = SKILL_METADATA[id];
   const vaultData = useVaultData();
   const { messages, streamingText, isLoading, error, sendMessage, clearSession, dismissError } =
@@ -97,6 +107,32 @@ function SkillScreenInner({ id }: { id: SkillId }) {
     };
   }, [isLoading]);
 
+  // ── Elapsed time tracking ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (isLoading) {
+      startTimeRef.current = Date.now();
+      setElapsedMs(0);
+      elapsedIntervalRef.current = setInterval(() => {
+        if (startTimeRef.current !== null) {
+          setElapsedMs(Date.now() - startTimeRef.current);
+        }
+      }, 500);
+    } else {
+      // Loading complete — stop tracking
+      if (elapsedIntervalRef.current) {
+        clearInterval(elapsedIntervalRef.current);
+        elapsedIntervalRef.current = null;
+      }
+      startTimeRef.current = null;
+    }
+    return () => {
+      if (elapsedIntervalRef.current) {
+        clearInterval(elapsedIntervalRef.current);
+        elapsedIntervalRef.current = null;
+      }
+    };
+  }, [isLoading]);
+
   const handleSend = () => {
     const text = input.trim();
     if (!text || isLoading) return;
@@ -111,6 +147,13 @@ function SkillScreenInner({ id }: { id: SkillId }) {
       ? parseSkillMessage(lastMessage.content)
       : null;
   const hasOptions = (lastParsed?.questions.length ?? 0) > 0;
+
+  // ── Scroll event handler for scroll-to-bottom button ──────────────────────
+  const handleScroll = useCallback((event: any) => {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+    setIsAtBottom(distanceFromBottom < 40);
+  }, []);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -138,177 +181,193 @@ function SkillScreenInner({ id }: { id: SkillId }) {
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={88}
+        keyboardVerticalOffset={90}
       >
-        <ScrollView
-          ref={scrollRef}
-          style={styles.messageList}
-          contentContainerStyle={styles.messageListContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {messages.length === 0 && !isLoading && (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyPrompt}>{skill.placeholder}</Text>
-              <Text style={styles.emptyFramework}>{skill.framework}</Text>
+        <View style={styles.flex}>
+          <ScrollView
+            ref={scrollRef}
+            style={styles.messageList}
+            contentContainerStyle={styles.messageListContent}
+            showsVerticalScrollIndicator={false}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
+          >
+            {messages.length === 0 && !isLoading && (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyPrompt}>{skill.placeholder}</Text>
+                <Text style={styles.emptyFramework}>{skill.framework}</Text>
 
-              {id === 'portfolio-reviewer' && vaultData && vaultData.holdings.length > 0 && (
-                <TouchableOpacity
-                  style={styles.vaultBtn}
-                  onPress={() => {
-                    const text = formatPortfolioForReview(vaultData);
-                    if (text) sendMessage(text);
-                  }}
-                  activeOpacity={0.75}
-                >
-                  <Ionicons name="wallet-outline" size={16} color={BG} />
-                  <Text style={styles.vaultBtnText}>Analyse my Vault portfolio</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
-          {messages.map((msg, i) => {
-            const isLast = i === messages.length - 1;
-            const parsed = msg.role === 'assistant' ? parseSkillMessage(msg.content) : null;
-            const displayContent = parsed ? parsed.displayText : msg.content;
-
-            return (
-              <View key={i}>
-                <MessageBubble role={msg.role} content={displayContent} />
-                {isLast && parsed && parsed.questions.length > 0 && !isLoading && (
-                  <SkillOptionPicker
-                    questions={parsed.questions}
-                    onSubmit={(answer) => sendMessage(answer)}
-                    disabled={isLoading}
-                  />
+                {id === 'portfolio-reviewer' && vaultData && vaultData.holdings.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.vaultBtn}
+                    onPress={() => {
+                      const text = formatPortfolioForReview(vaultData);
+                      if (text) sendMessage(text);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Ionicons name="wallet-outline" size={16} color={BG} />
+                    <Text style={styles.vaultBtnText}>Analyse my Vault portfolio</Text>
+                  </TouchableOpacity>
                 )}
               </View>
-            );
-          })}
+            )}
 
-          {isLoading && !streamingText && (
-            <View style={styles.loadingBubble}>
-              <View style={styles.loadingRow}>
-                <ActivityIndicator size="small" color={G2} />
-                <Text style={styles.loadingText}>{skill.loadingMessage}</Text>
-              </View>
-            </View>
-          )}
+            {messages.map((msg, i) => {
+              const isLast = i === messages.length - 1;
+              const parsed = msg.role === 'assistant' ? parseSkillMessage(msg.content) : null;
+              const displayContent = parsed ? parsed.displayText : msg.content;
 
-          {isLoading && streamingText ? (
-            <View style={styles.streamingBubble}>
-              <Text style={styles.streamingText}>{streamingText}</Text>
-              <ActivityIndicator size="small" color={G2} style={{ marginTop: 8 }} />
-            </View>
-          ) : null}
-
-          {/* Save as Slides - appears after a long completed analysis */}
-          {(() => {
-            const last = messages[messages.length - 1];
-            if (!last || last.role !== 'assistant' || isLoading || last.content.length < 400) return null;
-            if (slideSaved) {
               return (
-                <View style={styles.slidesSavedBanner}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                  <Text style={styles.slidesSavedText}>Saved to Archive</Text>
+                <View key={i}>
+                  <MessageBubble role={msg.role} content={displayContent} />
+                  {isLast && parsed && parsed.questions.length > 0 && !isLoading && (
+                    <SkillOptionPicker
+                      questions={parsed.questions}
+                      onSubmit={(answer) => sendMessage(answer)}
+                      disabled={isLoading}
+                    />
+                  )}
                 </View>
               );
-            }
-            return (
-              <View style={styles.saveSlideRow}>
-                {slideError ? (
-                  <Text style={styles.slideErrorText}>{slideError}</Text>
-                ) : null}
-                <TouchableOpacity
-                  style={[styles.saveSlidesBtn, isGenerating && styles.saveSlidesBtnDisabled]}
-                  onPress={async () => {
-                    setSlideError(null);
-                    const result = await generateSlides(last.content, id);
-                    if (result) {
-                      await saveAnalysisToArchive({
-                        skillId: id,
-                        skillName: skill.name,
-                        title: result.title,
-                        slides: result.slides,
-                      });
-                      setSlideSaved(true);
-                    } else {
-                      setSlideError('Could not generate slides. Try again.');
-                    }
-                  }}
-                  disabled={isGenerating}
-                  activeOpacity={0.75}
-                >
-                  {isGenerating ? (
-                    <ActivityIndicator size="small" color={G2} />
-                  ) : (
-                    <Ionicons name="albums-outline" size={15} color={W} />
-                  )}
-                  <Text style={styles.saveSlidesBtnText}>
-                    {isGenerating ? 'Generating slides…' : 'Save as Slides'}
+            })}
+
+            {/* Progress indicator replaces raw streaming text */}
+            {isLoading && (
+              <SkillProgress
+                skillId={id}
+                streamingText={streamingText}
+                elapsedMs={elapsedMs}
+              />
+            )}
+
+            {/* Save as Slides - appears after a long completed analysis */}
+            {(() => {
+              const last = messages[messages.length - 1];
+              if (!last || last.role !== 'assistant' || isLoading || last.content.length < 400) return null;
+              if (slideSaved) {
+                return (
+                  <View style={styles.slidesSavedBanner}>
+                    <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                    <Text style={styles.slidesSavedText}>Saved to Archive</Text>
+                  </View>
+                );
+              }
+              return (
+                <View style={styles.saveSlideRow}>
+                  {slideError ? (
+                    <Text style={styles.slideErrorText}>{slideError}</Text>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[styles.saveSlidesBtn, isGenerating && styles.saveSlidesBtnDisabled]}
+                    onPress={async () => {
+                      setSlideError(null);
+                      const result = await generateSlides(last.content, id);
+                      if (result) {
+                        await saveAnalysisToArchive({
+                          skillId: id,
+                          skillName: skill.name,
+                          title: result.title,
+                          slides: result.slides,
+                        });
+                        setSlideSaved(true);
+                      } else {
+                        setSlideError('Could not generate slides. Try again.');
+                      }
+                    }}
+                    disabled={isGenerating}
+                    activeOpacity={0.75}
+                  >
+                    {isGenerating ? (
+                      <ActivityIndicator size="small" color={G2} />
+                    ) : (
+                      <Ionicons name="albums-outline" size={15} color={W} />
+                    )}
+                    <Text style={styles.saveSlidesBtnText}>
+                      {isGenerating ? 'Generating slides…' : 'Save as Slides'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
+
+            {/* Conviction prompt — Catalyst Scanner only, once per session */}
+            {(() => {
+              if (id !== 'market-catalyst-scanner') return null;
+              if (convictionResponded) return null;
+              const last = messages[messages.length - 1];
+              if (!last || last.role !== 'assistant' || isLoading || last.content.length < 200) return null;
+              const detectedTheme: ConvictionTheme | null = detectThemeFromText(last.content);
+              if (!detectedTheme) return null;
+              // Skip if user already has a conviction for this theme
+              if (convictions.some((c) => c.theme === detectedTheme)) return null;
+
+              const themeLabel = CONVICTION_THEME_LABEL[detectedTheme];
+
+              const respond = async (belief: ConvictionBelief) => {
+                setConvictionResponded(true);
+                // 'no' → low confidence (user actively disbelieves, not uncertain)
+                // 'still-forming' / 'yes' → medium confidence
+                const confidence = belief === 'no' ? 'low' : 'medium';
+                await setConviction(detectedTheme, belief, confidence, undefined, 'catalyst-scanner');
+              };
+
+              return (
+                <View style={styles.convictionPromptCard}>
+                  <View style={styles.convictionPromptHeader}>
+                    <Ionicons name="bulb-outline" size={14} color={GOLD} />
+                    <Text style={styles.convictionPromptLabel}>Based on what you've read</Text>
+                  </View>
+                  <Text style={styles.convictionPromptQuestion}>
+                    Do you believe in <Text style={styles.convictionPromptTheme}>{themeLabel}</Text>?
                   </Text>
+                  <View style={styles.convictionPromptButtons}>
+                    {(['yes', 'still-forming', 'no'] as ConvictionBelief[]).map((b) => (
+                      <TouchableOpacity
+                        key={b}
+                        style={styles.convictionPromptBtn}
+                        onPress={() => respond(b)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.convictionPromptBtnText}>
+                          {b === 'yes' ? 'Yes' : b === 'no' ? 'No' : 'Still forming'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              );
+            })()}
+
+            {error && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>{error}</Text>
+                <TouchableOpacity onPress={dismissError}>
+                  <Text style={styles.errorDismiss}>Dismiss</Text>
                 </TouchableOpacity>
               </View>
-            );
-          })()}
+            )}
+          </ScrollView>
 
-          {/* Conviction prompt — Catalyst Scanner only, once per session */}
-          {(() => {
-            if (id !== 'market-catalyst-scanner') return null;
-            if (convictionResponded) return null;
-            const last = messages[messages.length - 1];
-            if (!last || last.role !== 'assistant' || isLoading || last.content.length < 200) return null;
-            const detectedTheme: ConvictionTheme | null = detectThemeFromText(last.content);
-            if (!detectedTheme) return null;
-            // Skip if user already has a conviction for this theme
-            if (convictions.some((c) => c.theme === detectedTheme)) return null;
-
-            const themeLabel = CONVICTION_THEME_LABEL[detectedTheme];
-
-            const respond = async (belief: ConvictionBelief) => {
-              setConvictionResponded(true);
-              // 'no' → low confidence (user actively disbelieves, not uncertain)
-              // 'still-forming' / 'yes' → medium confidence
-              const confidence = belief === 'no' ? 'low' : 'medium';
-              await setConviction(detectedTheme, belief, confidence, undefined, 'catalyst-scanner');
-            };
-
-            return (
-              <View style={styles.convictionPromptCard}>
-                <View style={styles.convictionPromptHeader}>
-                  <Ionicons name="bulb-outline" size={14} color={GOLD} />
-                  <Text style={styles.convictionPromptLabel}>Based on what you've read</Text>
-                </View>
-                <Text style={styles.convictionPromptQuestion}>
-                  Do you believe in <Text style={styles.convictionPromptTheme}>{themeLabel}</Text>?
-                </Text>
-                <View style={styles.convictionPromptButtons}>
-                  {(['yes', 'still-forming', 'no'] as ConvictionBelief[]).map((b) => (
-                    <TouchableOpacity
-                      key={b}
-                      style={styles.convictionPromptBtn}
-                      onPress={() => respond(b)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.convictionPromptBtnText}>
-                        {b === 'yes' ? 'Yes' : b === 'no' ? 'No' : 'Still forming'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            );
-          })()}
-
-          {error && (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText}>{error}</Text>
-              <TouchableOpacity onPress={dismissError}>
-                <Text style={styles.errorDismiss}>Dismiss</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Scroll-to-bottom button */}
+          {!isAtBottom && messages.length > 0 && (
+            <TouchableOpacity
+              style={styles.scrollToBottomBtn}
+              onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+              activeOpacity={0.8}
+            >
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                <Path
+                  d="M6 9l6 6 6-6"
+                  stroke={BG}
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </TouchableOpacity>
           )}
-        </ScrollView>
+        </View>
 
         {/* Hide text input when a picker is active */}
         {!hasOptions && (
@@ -393,13 +452,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingHorizontal: 24,
   },
-
-  streamingBubble: { paddingVertical: 4, paddingHorizontal: 4 },
-  streamingText: { color: G1, fontSize: 14, lineHeight: 22 },
-
-  loadingBubble: { paddingVertical: 12, paddingHorizontal: 4 },
-  loadingRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  loadingText: { color: G1, fontSize: 13, lineHeight: 18, flex: 1 },
 
   errorBanner: {
     backgroundColor: '#1A0A0A',
@@ -551,5 +603,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#CBD5E1',
+  },
+
+  // ── Scroll-to-bottom button ───────────────────────────────────────────────
+  scrollToBottomBtn: {
+    position: 'absolute',
+    bottom: 70,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
 });

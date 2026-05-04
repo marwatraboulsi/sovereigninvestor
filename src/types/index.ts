@@ -48,6 +48,7 @@ export interface FundManagerContext {
   vaultSummary?: string;      // formatted vault holdings
   recentAnalyses?: string;    // last 2-3 saved analysis titles + skill
   knowledgeChunks?: string;   // RAG-retrieved knowledge relevant to the current query
+  userProfile?: string;       // investor profile for portfolio reviewer personalisation
 }
 
 export interface ClaudeRequestOptions {

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 const ORIENTATION_KEY = 'orientation_seen';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -62,6 +63,7 @@ export default function ChatScreen() {
   const [toolsOpen, setToolsOpen]           = useState(false);
   const [fmContext, setFmContext]           = useState<FundManagerContext>({});
   const [showPrivacy, setShowPrivacy]       = useState(false);
+  const [isAtBottom, setIsAtBottom]         = useState(true);
   const scrollRef                           = useRef<ScrollView>(null);
   const abortRef                            = useRef<(() => void) | null>(null);
 
@@ -265,6 +267,12 @@ export default function ChatScreen() {
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="on-drag"
           onScrollBeginDrag={() => setToolsOpen(false)}
+          onScroll={(event) => {
+            const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+            const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+            setIsAtBottom(distanceFromBottom < 40);
+          }}
+          scrollEventThrottle={16}
         >
           {historyLoading ? (
             <View style={s.historyLoading}>
@@ -295,6 +303,25 @@ export default function ChatScreen() {
             </View>
           )}
         </ScrollView>
+
+        {/* Scroll-to-bottom button */}
+        {!isAtBottom && messages.length > 0 && (
+          <TouchableOpacity
+            style={s.scrollToBottomBtn}
+            onPress={() => scrollRef.current?.scrollToEnd({ animated: true })}
+            activeOpacity={0.8}
+          >
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+              <Path
+                d="M6 9l6 6 6-6"
+                stroke={BG}
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
+          </TouchableOpacity>
+        )}
 
         {/* Input area */}
         <View style={s.inputArea}>
@@ -580,9 +607,11 @@ const s = StyleSheet.create({
   errorDismiss: { color: G1, fontSize: 13, marginLeft: 12 },
 
   // Input area — glass composer
+  // paddingBottom is kept small because KeyboardAvoidingView lifts the whole view;
+  // using TAB_BAR_HEIGHT here would double-pad when the keyboard is open.
   inputArea: {
     paddingHorizontal: 20,
-    paddingBottom: TAB_BAR_HEIGHT,
+    paddingBottom: 12,
     paddingTop: 14,
     gap: 6,
     backgroundColor: 'rgba(7, 22, 16, 0.78)',
@@ -640,6 +669,24 @@ const s = StyleSheet.create({
     backgroundColor: GOLD, alignItems: 'center', justifyContent: 'center',
   },
   sendBtnOff: { backgroundColor: S2 },
+
+  // Scroll-to-bottom button
+  scrollToBottomBtn: {
+    position: 'absolute',
+    bottom: TAB_BAR_HEIGHT + 60 + 8,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: GOLD,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
 
   privacyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
   privacySheet: {

@@ -10,6 +10,9 @@
  * the skill screens which need the full response before rendering.
  *
  * Prompt caching keeps costs low - knowledge base is only charged once per hour.
+ *
+ * All Claude calls are proxied through a Supabase Edge Function so that the
+ * Anthropic API key never leaves the server.
  */
 
 import { ClaudeRequestOptions, ClaudeResponse, FundManagerContext } from '@/types';
@@ -131,6 +134,29 @@ export async function loadFundManagerContext(): Promise<FundManagerContext> {
       const lines = analyses.map((a: any) => `• "${a.title}" (${a.skill_name})`);
       ctx.recentAnalyses = `The user's recent saved analyses:\n${lines.join('\n')}`;
     }
+
+    // User profile (for portfolio reviewer personalisation)
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('knowledge_level, investment_status, primary_goal, risk_tolerance, age_range, worldview, macro_convictions, worldview_note, response_style')
+      .eq('id', user.id)
+      .single();
+
+    if (profileData) {
+      const profileLines = [
+        profileData.knowledge_level && `Knowledge level: ${profileData.knowledge_level}`,
+        profileData.investment_status && `Investment status: ${profileData.investment_status}`,
+        profileData.primary_goal && `Primary goal: ${profileData.primary_goal}`,
+        profileData.risk_tolerance && `Risk tolerance: ${profileData.risk_tolerance}`,
+        profileData.age_range && `Age range: ${profileData.age_range}`,
+        profileData.worldview && `Investment values: ${profileData.worldview}`,
+        profileData.macro_convictions?.length && `Macro convictions: ${profileData.macro_convictions.join(', ')}`,
+        profileData.worldview_note && `Worldview note: "${profileData.worldview_note}"`,
+      ].filter(Boolean);
+      if (profileLines.length) {
+        ctx.userProfile = `The user's investor profile:\n${profileLines.join('\n')}`;
+      }
+    }
   } catch { /* silent */ }
 
   return ctx;
@@ -138,7 +164,9 @@ export async function loadFundManagerContext(): Promise<FundManagerContext> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+// All Claude API calls are proxied through a Supabase Edge Function.
+// The Anthropic API key lives only on the server — never in the mobile binary.
+const PROXY_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/claude-proxy`;
 const API_VERSION = '2023-06-01';
 
 // max_uses: 8 caps web searches to one per research phase, keeping response
@@ -149,10 +177,19 @@ const WEB_SEARCH_TOOL = {
   max_uses: 8,
 } as const;
 
-function getApiKey(): string {
-  const key = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-  if (!key) throw new Error('API key not configured. Please add it to your .env file.');
-  return key;
+/**
+ * Returns an Authorization header value using the current Supabase session token.
+ * Falls back to the anon key if no session is present (guest / unauthenticated).
+ */
+async function getAuthToken(): Promise<string> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return `Bearer ${session.access_token}`;
+    }
+  } catch { /* fall through */ }
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  return `Bearer ${anonKey}`;
 }
 
 // ─── System prompts ───────────────────────────────────────────────────────────
@@ -328,10 +365,15 @@ function buildRequestBody(
     model = isShort ? MODELS.simpleQA : MODELS.portfolioAnalysis;
   }
 
-  const systemPrompt = options.systemPromptOverride
+  let systemPrompt = options.systemPromptOverride
     ?? (isSkillMode
       ? getSkillSystemPrompt(skill!)
       : buildChatSystemPrompt(userProfile, fundManagerContext));
+
+  // Append investor profile context for portfolio reviewer
+  if (isPortfolioReview && fundManagerContext?.userProfile) {
+    systemPrompt = systemPrompt + `\n\n## INVESTOR PROFILE\n${fundManagerContext.userProfile}\nUse this profile to personalise the review — tailor depth and framing to their knowledge level, acknowledge their risk tolerance when discussing risk, and connect insights to their stated goals where relevant.`;
+  }
 
   const useWebSearch = isSkillMode && !isPortfolioReview;
 
@@ -376,7 +418,7 @@ export interface StreamCallbacks {
 }
 
 /**
- * Streams a response from Claude using XMLHttpRequest.
+ * Streams a response from Claude via the Supabase Edge Function proxy.
  * XHR is the only reliable way to stream in React Native / Hermes.
  * Returns an abort function - call it to cancel the request.
  *
@@ -393,15 +435,12 @@ export function streamClaude(
   callbacks: StreamCallbacks,
 ): () => void {
   const { body } = buildRequestBody(options, true);
-  const apiKey = getApiKey();
   const timeoutMs = options.timeoutMs ?? 120_000;
 
+  // Abort flag for calls that are cancelled before the auth token resolves
+  let abortedBeforeOpen = false;
+  let xhrStarted = false;
   const xhr = new XMLHttpRequest();
-  xhr.open('POST', ANTHROPIC_API_URL, true);
-  xhr.setRequestHeader('Content-Type', 'application/json');
-  xhr.setRequestHeader('x-api-key', apiKey);
-  xhr.setRequestHeader('anthropic-version', API_VERSION);
-  // Do NOT set xhr.timeout — use the manual hard timeout below instead.
 
   let processedLength = 0;
   let fullText = '';
@@ -510,14 +549,33 @@ export function streamClaude(
     // silently cancelled — settled flag prevents double callbacks
   };
 
-  xhr.send(JSON.stringify(body));
+  // Open XHR after resolving the auth token (async — avoids blocking the render)
+  getAuthToken().then((token) => {
+    if (abortedBeforeOpen) return;
+    xhrStarted = true;
+    xhr.open('POST', PROXY_URL, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Authorization', token);
+    xhr.setRequestHeader('anthropic-version', API_VERSION);
+    xhr.send(JSON.stringify(body));
+  }).catch(() => {
+    if (!settled) {
+      settled = true;
+      cleanup();
+      callbacks.onError(new Error('Authentication error. Please sign in again.'));
+    }
+  });
 
   // Return abort function so callers (e.g. clearSession) can cancel in-flight requests
   return () => {
     if (!settled) {
       settled = true;
       cleanup();
-      xhr.abort();
+      if (xhrStarted) {
+        xhr.abort();
+      } else {
+        abortedBeforeOpen = true;
+      }
     }
   };
 }
@@ -531,13 +589,15 @@ export async function callClaude(options: ClaudeRequestOptions): Promise<ClaudeR
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
+  const token = await getAuthToken();
+
   let response: Response;
   try {
-    response = await fetch(ANTHROPIC_API_URL, {
+    response = await fetch(PROXY_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': getApiKey(),
+        'Authorization': token,
         'anthropic-version': API_VERSION,
       },
       body: JSON.stringify(body),
@@ -587,17 +647,17 @@ export async function callClaudeRaw(
   timeoutMs = 60_000,
   model: string = MODELS.portfolioAnalysis,
 ): Promise<string> {
-  const apiKey = getApiKey();
+  const token = await getAuthToken();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
   try {
-    response = await fetch(ANTHROPIC_API_URL, {
+    response = await fetch(PROXY_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'Authorization': token,
         'anthropic-version': API_VERSION,
       },
       body: JSON.stringify({
