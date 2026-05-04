@@ -166,7 +166,7 @@ export async function loadFundManagerContext(): Promise<FundManagerContext> {
 
 // All Claude API calls are proxied through a Supabase Edge Function.
 // The Anthropic API key lives only on the server — never in the mobile binary.
-const PROXY_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/dynamic-service`;
+const PROXY_URL = process.env.EXPO_PUBLIC_CLAUDE_PROXY_URL ?? `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/dynamic-service`;
 const API_VERSION = '2023-06-01';
 
 // max_uses: 8 caps web searches to one per research phase, keeping response
