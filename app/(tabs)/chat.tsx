@@ -13,7 +13,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 const ORIENTATION_KEY = 'orientation_seen';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import Markdown from 'react-native-markdown-display';
@@ -51,6 +51,7 @@ const TOOLS = [
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ChatScreen() {
+  const insets                              = useSafeAreaInsets();
   const { isGuest }                         = useGuest();
   const { profile }                         = useUserProfile();
   const { loadConversation, loadConversationById, startNewConversation, saveMessage } = useConversation();
@@ -324,7 +325,7 @@ export default function ChatScreen() {
         )}
 
         {/* Input area */}
-        <View style={s.inputArea}>
+        <View style={[s.inputArea, { paddingBottom: TAB_BAR_HEIGHT - insets.bottom + 8 }]}>
           {/* Tools menu */}
           {toolsOpen && hasMessages && !isStreaming && (
             <View style={s.toolsMenu}>
