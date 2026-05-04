@@ -9,6 +9,7 @@ interface SessionState {
   streamingText: string;
   isLoading: boolean;
   error: string | null;
+  startedAt: number | null; // timestamp when the current analysis began
 }
 
 const EMPTY_STATE: SessionState = {
@@ -16,6 +17,7 @@ const EMPTY_STATE: SessionState = {
   streamingText: '',
   isLoading: false,
   error: null,
+  startedAt: null,
 };
 
 // ─── Module-level store ───────────────────────────────────────────────────────
@@ -114,6 +116,7 @@ export function useSkillSession(skill: SkillId) {
         streamingText: '',
         isLoading: true,
         error: null,
+        startedAt: Date.now(),
       }));
 
       const timeoutMs = skill === 'stock-researcher' ? 600_000 : 300_000;
@@ -172,6 +175,7 @@ export function useSkillSession(skill: SkillId) {
                   streamingText: '',
                   isLoading: false,
                   error: null,
+                  startedAt: null,
                 }));
                 setStateInternal(next);
                 // Persist messages after a successful response
@@ -249,6 +253,7 @@ export function useSkillSession(skill: SkillId) {
     streamingText: state.streamingText,
     isLoading: state.isLoading,
     error: state.error,
+    startedAt: state.startedAt,
     sendMessage,
     clearSession,
     dismissError,

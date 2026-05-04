@@ -68,7 +68,6 @@ function SkillScreenInner({ id }: { id: SkillId }) {
 
   // ── Progress tracking ──────────────────────────────────────────────────────
   const [elapsedMs, setElapsedMs]   = useState(0);
-  const startTimeRef                = useRef<number | null>(null);
   const elapsedIntervalRef          = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Scroll-to-bottom button ────────────────────────────────────────────────
@@ -76,7 +75,7 @@ function SkillScreenInner({ id }: { id: SkillId }) {
 
   const skill     = SKILL_METADATA[id];
   const vaultData = useVaultData();
-  const { messages, streamingText, isLoading, error, sendMessage, clearSession, dismissError } =
+  const { messages, streamingText, isLoading, error, startedAt, sendMessage, clearSession, dismissError } =
     useSkillSession(id);
   const { isListening, isAvailable: micAvailable, toggle: toggleMic } = useSpeechInput({
     onResult: (text) => setInput((prev) => (prev ? prev + ' ' + text : text)),
@@ -108,22 +107,20 @@ function SkillScreenInner({ id }: { id: SkillId }) {
   }, [isLoading]);
 
   // ── Elapsed time tracking ──────────────────────────────────────────────────
+  // Uses startedAt from the session store (survives navigation) so the progress
+  // bar continues from the correct position when the user navigates back.
   useEffect(() => {
-    if (isLoading) {
-      startTimeRef.current = Date.now();
-      setElapsedMs(0);
+    if (isLoading && startedAt !== null) {
+      // Immediately sync to actual elapsed time (catches up after navigation)
+      setElapsedMs(Date.now() - startedAt);
       elapsedIntervalRef.current = setInterval(() => {
-        if (startTimeRef.current !== null) {
-          setElapsedMs(Date.now() - startTimeRef.current);
-        }
+        setElapsedMs(Date.now() - startedAt);
       }, 500);
     } else {
-      // Loading complete — stop tracking
       if (elapsedIntervalRef.current) {
         clearInterval(elapsedIntervalRef.current);
         elapsedIntervalRef.current = null;
       }
-      startTimeRef.current = null;
     }
     return () => {
       if (elapsedIntervalRef.current) {
@@ -131,7 +128,7 @@ function SkillScreenInner({ id }: { id: SkillId }) {
         elapsedIntervalRef.current = null;
       }
     };
-  }, [isLoading]);
+  }, [isLoading, startedAt]);
 
   const handleSend = () => {
     const text = input.trim();
