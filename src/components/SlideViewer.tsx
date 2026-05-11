@@ -163,7 +163,7 @@ function SlideCard({ slide, width, accent, isFirst, isLast, pageNum, total }: Ca
           <View style={s.metricsGrid}>
             {(slide.metrics ?? []).map((m, i) => (
               <View key={i} style={[s.metricCard, { borderColor: G3 }]}>
-                <Text style={[s.metricValue, { color: accent }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                <Text style={[s.metricValue, { color: accent }]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.5}>
                   {m.value}
                 </Text>
                 <Text style={s.metricLabel}>{m.label}</Text>

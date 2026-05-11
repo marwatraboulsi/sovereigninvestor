@@ -60,6 +60,8 @@ export interface ClaudeRequestOptions {
   timeoutMs?: number;
   /** Bypasses buildChatSystemPrompt / skill prompt. Used by Learn Mode. */
   systemPromptOverride?: string;
+  /** Overrides the web_search max_uses cap (default 8). Used by phased stock analysis (2 per phase). */
+  maxWebSearches?: number;
 }
 
 export interface ClaudeResponse {
@@ -139,6 +141,8 @@ export interface PlaybookRule {
   createdAt: number;                // unix timestamp
   status: RuleStatus;
   overrideCount: number;            // how many times Conscious Proceed bypassed this rule
+  decisionTypes: DecisionType[];    // which decision types can surface this rule
+  triggerTags: DecisionTrigger[];   // which emotional triggers this rule addresses
 }
 
 // ─── Decision Log ─────────────────────────────────────────────────────────────
@@ -230,5 +234,6 @@ export interface InterceptSession {
   emotionalTriggers: DecisionTrigger[];
   rulesMatched: PlaybookRule[];
   playbookGapDetected: boolean;
-  currentStep: 1 | 2 | 3 | 4;
+  currentStep: 1 | 2 | 3;
+  isPlannedTrade: boolean | null;
 }

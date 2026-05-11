@@ -34,6 +34,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useGuest } from '@/contexts/GuestContext';
+import { streamClaude } from '@/api/claudeClient';
 import { AccountModal } from '@/components/AccountModal';
 import { TickerSearch } from '@/components/TickerSearch';
 import { RuleWizard } from '@/components/RuleWizard';
@@ -66,12 +67,13 @@ interface TriggerOption {
 }
 
 const BUY_TRIGGERS: TriggerOption[] = [
-  { label: "I've seen strong recent price performance",  trigger: 'recent-performance' },
-  { label: "People I know are making money on this",     trigger: 'social-comparison'  },
-  { label: "I'm worried about missing out",              trigger: 'price-rise-fomo'    },
-  { label: "I feel confident about this company",        trigger: 'overconfidence'      },
-  { label: "I've been reading a lot about this",         trigger: 'news-reaction'       },
-  { label: "I'm not sure — something just feels right",  trigger: 'unsure'             },
+  { label: "I've seen strong recent price performance",        trigger: 'recent-performance' },
+  { label: "People I know are making money on this",           trigger: 'social-comparison'  },
+  { label: "I'm worried about missing out",                    trigger: 'price-rise-fomo'    },
+  { label: "I feel confident about this company",              trigger: 'overconfidence'      },
+  { label: "I've been reading a lot about this",               trigger: 'news-reaction'       },
+  { label: "I'm looking for something to do with my money",   trigger: 'boredom'            },
+  { label: "I'm not sure — something just feels right",        trigger: 'unsure'             },
 ];
 
 const SELL_TRIGGERS: TriggerOption[] = [
@@ -79,6 +81,7 @@ const SELL_TRIGGERS: TriggerOption[] = [
   { label: "I've seen bad news about this company",      trigger: 'news-reaction'       },
   { label: "I want to lock in my gains",                 trigger: 'overconfidence'      },
   { label: "I regret buying this and want out",          trigger: 'regret-avoidance'    },
+  { label: "I want to free up cash for something else",  trigger: 'boredom'            },
   { label: "I'm not sure — something just feels off",    trigger: 'unsure'             },
 ];
 
@@ -126,9 +129,52 @@ function suggestCategory(triggers: DecisionTrigger[]): RuleCategory {
 const STEP_SUBTITLES: Record<number, string> = {
   1: "What are you thinking about doing?",
   2: "What's driving this?",
-  3: "Checking your playbook…",
-  4: "Here's what your playbook says.",
+  3: "Here's what your playbook says.",
 };
+
+// ─── Nora coaching system prompt (intercept mode) ─────────────────────────────
+
+const NORA_INTERCEPT_SYSTEM = `You are Nora, a behavioural finance coach for retail investors. A user is pausing to check an investment impulse against their playbook.
+
+Write 2–3 short paragraphs that:
+1. Acknowledge the emotional driver they identified
+2. Connect it to the relevant rule(s) they've set for themselves, or note the gap if none exist
+3. Give a clear, honest recommendation
+
+Be direct. Use the user's specific situation. Avoid generic platitudes. Keep each paragraph to 2–3 sentences. Do not use bullet points or headers. Do not include suggestions or a SUGGESTIONS: line.`;
+
+// ─── Prompt builders ──────────────────────────────────────────────────────────
+
+function buildFullCoachingPrompt(sess: InterceptSession, matched: PlaybookRule[]): string {
+  const dtLabel =
+    sess.decisionType === 'buy'  ? 'buy'  :
+    sess.decisionType === 'sell' ? 'sell' : 'transact in';
+  const triggerList = sess.emotionalTriggers
+    .map((t) => TRIGGER_LABEL[t])
+    .join(', ');
+  const rulesText = matched.length > 0
+    ? matched.map((r) => `Rule "${r.title}": ${r.body}`).join('\n')
+    : 'No rules in their playbook matched this situation.';
+
+  return `The user is considering whether to ${dtLabel} ${sess.assetName || sess.ticker} (${sess.ticker}).
+
+Emotional drivers they identified: ${triggerList || 'unclear — they weren\'t sure what\'s driving it'}
+
+Their playbook rules for this moment:
+${rulesText}
+
+Coach them through this pause.`;
+}
+
+function buildPlannedTradeCoachingPrompt(sess: InterceptSession): string {
+  const dtLabel =
+    sess.decisionType === 'buy'  ? 'buy'  :
+    sess.decisionType === 'sell' ? 'sell' : 'transact in';
+
+  return `The user is executing a planned trade — they want to ${dtLabel} ${sess.assetName || sess.ticker} (${sess.ticker}). This was already part of their investment plan, not a fresh impulse.
+
+Give a brief, grounding check-in (2 short paragraphs): acknowledge it's planned, offer one practical sizing or timing consideration they might want to confirm before acting, and encourage them to proceed with clarity. Keep it concise and affirming.`;
+}
 
 // ─── Initial session ─────────────────────────────────────────────────────────
 
@@ -140,6 +186,7 @@ const BLANK_SESSION: InterceptSession = {
   rulesMatched:         [],
   playbookGapDetected:  false,
   currentStep:          1,
+  isPlannedTrade:       null,
 };
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
@@ -196,8 +243,14 @@ export default function InterceptScreen() {
 function InterceptWizard() {
   // ── Core wizard state ──────────────────────────────────────────────────────
   const [session,       setSession]       = useState<InterceptSession>(BLANK_SESSION);
+  const [showGate,      setShowGate]      = useState(false);
   const [tickerInfo,    setTickerInfo]    = useState<TickerInfo | null>(null);
-  const [checkingRules, setCheckingRules] = useState(false);
+
+  // ── Nora streaming state ───────────────────────────────────────────────────
+  const [noraStreamingText,    setNoraStreamingText]    = useState('');
+  const [noraCoachingResponse, setNoraCoachingResponse] = useState('');
+  const [noraStreaming,        setNoraStreaming]         = useState(false);
+  const abortNoraRef = useRef<(() => void) | null>(null);
 
   // ── Conscious Proceed state ────────────────────────────────────────────────
   const [showConscious,  setShowConscious]  = useState(false);
@@ -221,7 +274,7 @@ function InterceptWizard() {
   const isFirstLogRef = useRef(false);
 
   // ── Data hooks ─────────────────────────────────────────────────────────────
-  const { rules, reload: reloadRules, addRule, matchRules } = usePlaybook();
+  const { rules, reload: reloadRules, addRule, matchRules, matchRulesForPlannedTrade } = usePlaybook();
   const { addLog, logs, loaded: decisionsLoaded, reload: reloadDecisionLog } = useDecisionLog();
   const { profile } = useUserProfile();
   const { convictions, reload: reloadConvictions } = useConvictions();
@@ -251,17 +304,29 @@ function InterceptWizard() {
     [vaultData, session.ticker],
   );
 
-  // Cleanup timer on unmount
+  // Cleanup on unmount
   useEffect(() => {
-    return () => { if (successTimerRef.current) clearTimeout(successTimerRef.current); };
+    return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+      abortNoraRef.current?.();
+    };
   }, []);
 
   // ── Wizard navigation ──────────────────────────────────────────────────────
 
+  function abortNora() {
+    abortNoraRef.current?.();
+    abortNoraRef.current = null;
+    setNoraStreamingText('');
+    setNoraCoachingResponse('');
+    setNoraStreaming(false);
+  }
+
   function resetWizard() {
+    abortNora();
     setSession(BLANK_SESSION);
+    setShowGate(false);
     setTickerInfo(null);
-    setCheckingRules(false);
     setShowConscious(false);
     setOverrideRuleId('none');
     setOverrideReason('');
@@ -273,34 +338,76 @@ function InterceptWizard() {
   }
 
   function goBack() {
-    if (session.currentStep > 1) {
+    if (session.currentStep === 3) {
+      abortNora();
+      if (session.isPlannedTrade) {
+        // Planned trade: back to gate
+        setSession((prev) => ({ ...prev, currentStep: 1, isPlannedTrade: null }));
+        setShowGate(true);
+      } else {
+        setSession((prev) => ({ ...prev, currentStep: 2 as 1 | 2 | 3 }));
+      }
+    } else if (session.currentStep > 1) {
       setSession((prev) => ({
         ...prev,
-        currentStep: (prev.currentStep - 1) as 1 | 2 | 3 | 4,
+        currentStep: (prev.currentStep - 1) as 1 | 2 | 3,
       }));
     }
   }
 
-  function advanceToStep2() {
-    setSession((prev) => ({ ...prev, currentStep: 2 }));
+  function handleGateBack() {
+    setShowGate(false);
+  }
+
+  function handleStep1Continue() {
+    setShowGate(true);
+  }
+
+  function advanceFromGateToStep2() {
+    setShowGate(false);
+    setSession((prev) => ({ ...prev, isPlannedTrade: false, currentStep: 2 }));
+  }
+
+  function streamNora(userMessage: string) {
+    setNoraStreaming(true);
+    setNoraStreamingText('');
+    setNoraCoachingResponse('');
+    abortNoraRef.current = streamClaude(
+      {
+        messages: [{ role: 'user', content: userMessage }],
+        systemPromptOverride: NORA_INTERCEPT_SYSTEM,
+        maxWebSearches: 0,
+      },
+      {
+        onChunk: (text) => setNoraStreamingText((prev) => prev + text),
+        onDone:  (content) => { setNoraCoachingResponse(content); setNoraStreaming(false); },
+        onError: () => setNoraStreaming(false),
+      },
+    );
   }
 
   function advanceToStep3() {
-    setSession((prev) => ({ ...prev, currentStep: 3 }));
-    setCheckingRules(true);
-    setTimeout(() => {
-      const matched = matchRules(session.decisionType!, session.emotionalTriggers);
-      setSession((prev) => ({
-        ...prev,
-        rulesMatched:        matched,
-        playbookGapDetected: matched.length === 0,
-      }));
-      setCheckingRules(false);
-    }, 900);
+    const matched = matchRules(session.decisionType!, session.emotionalTriggers);
+    setSession((prev) => ({
+      ...prev,
+      currentStep:         3,
+      rulesMatched:        matched,
+      playbookGapDetected: matched.length === 0,
+    }));
+    streamNora(buildFullCoachingPrompt(session, matched));
   }
 
-  function advanceToStep4() {
-    setSession((prev) => ({ ...prev, currentStep: 4 }));
+  function advanceFromGateToStep3Planned() {
+    const matched = matchRulesForPlannedTrade(session.decisionType!);
+    setShowGate(false);
+    setSession((prev) => ({
+      ...prev,
+      isPlannedTrade:      true,
+      currentStep:         3,
+      rulesMatched:        matched,
+      playbookGapDetected: matched.length === 0,
+    }));
+    streamNora(buildPlannedTradeCoachingPrompt(session));
   }
 
   function selectDecisionType(dt: DecisionType) {
@@ -473,6 +580,8 @@ function InterceptWizard() {
       body:          partial.body!,
       status:        partial.status ?? 'active',
       sourceTrigger: 'manual',
+      decisionTypes: partial.decisionTypes ?? ['buy', 'sell', 'unsure'],
+      triggerTags:   partial.triggerTags ?? [],
     });
     await reloadRules();
     setRuleWizardVisible(false);
@@ -480,12 +589,49 @@ function InterceptWizard() {
   }
 
   function handleBuildRuleFirst() {
-    const suggestedCat = suggestCategory(session.emotionalTriggers);
-    setRuleWizardCategory(suggestedCat);
-    setRuleWizardVisible(true);
+    const dtLabel =
+      session.decisionType === 'buy'  ? 'buying'  :
+      session.decisionType === 'sell' ? 'selling' : 'a decision about';
+    const triggerList = session.emotionalTriggers.map((t) => TRIGGER_LABEL[t]).join(', ');
+    const coachingBlock = noraCoachingResponse
+      ? `\n\nNora's initial read:\n${noraCoachingResponse}`
+      : '';
+    const goalLine   = profile?.primaryGoal  ? `\nMy investment goal: ${profile.primaryGoal}`    : '';
+    const worldLine  = profile?.worldview    ? `\nMy investing worldview: ${profile.worldview}`  : '';
+
+    const noraSeed =
+      `I want to build a Playbook rule based on what just came up. Here's the context:\n\n` +
+      `I was considering ${dtLabel} ${session.assetName || session.ticker}` +
+      (session.ticker ? ` (${session.ticker})` : '') + `.` +
+      `\nTriggers I identified: ${triggerList || 'unclear'}.` +
+      `${coachingBlock}` +
+      `\n\nMy profile:${goalLine}${worldLine}` +
+      `\n\nHelp me articulate this as a Playbook rule that reflects genuine investment discipline — ` +
+      `not a rigid constraint, but a mirror of my values. Only suggest a rule if it actually makes sense ` +
+      `given my situation. Ask me clarifying questions if needed before drafting anything.`;
+
+    Alert.alert(
+      'Build a rule',
+      'Work on it with Nora, or write it yourself?',
+      [
+        {
+          text: 'Work on it with Nora',
+          onPress: () => router.push({ pathname: '/(tabs)/chat', params: { seed: noraSeed } }),
+        },
+        {
+          text: 'Write it myself',
+          onPress: () => {
+            const suggestedCat = suggestCategory(session.emotionalTriggers);
+            setRuleWizardCategory(suggestedCat);
+            setRuleWizardVisible(true);
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
   }
 
-  // ── "Talk it through" → seeds chat ────────────────────────────────────────
+  // ── "Talk it through" → seeds chat with Nora coaching context ─────────────
 
   function handleTalkItThrough() {
     const dtLabel =
@@ -494,19 +640,36 @@ function InterceptWizard() {
     const triggerList = session.emotionalTriggers
       .map((t) => TRIGGER_LABEL[t])
       .join(', ');
-    const msg = `I'm considering ${dtLabel} ${session.assetName} (${session.ticker}). The triggers I identified were: ${triggerList || 'unclear'}. Help me think through this.`;
+    const coachingBlock = noraCoachingResponse
+      ? `\n\nNora's initial coaching:\n${noraCoachingResponse}`
+      : '';
+    const msg =
+      `I'm considering ${dtLabel} ${session.assetName} (${session.ticker}). ` +
+      `The triggers I identified were: ${triggerList || 'unclear'}.${coachingBlock} ` +
+      `Help me think through this further.`;
 
-    router.push({
-      pathname: '/(tabs)/chat',
-      params:   { seed: msg },
-    });
+    router.push({ pathname: '/(tabs)/chat', params: { seed: msg } });
   }
 
-  // ── "Learn first" → Learn Mode screen ────────────────────────────────────
+  // ── Gap: proceed without ConsciousProceedSheet ────────────────────────────
+
+  async function handleGapProceedAnyway() {
+    await logAndShowSuccess('no-rules-matched');
+  }
+
+  // ── "Learn first" → Nora chat with context seed ──────────────────────────
 
   function handleLearnFirst() {
     const topic = deriveTopicFromTicker(session.ticker, session.assetName);
-    router.push('/learn/' + encodeURIComponent(topic));
+    const dtLabel =
+      session.decisionType === 'buy'  ? 'buying'  :
+      session.decisionType === 'sell' ? 'selling' : 'a decision about';
+    const msg =
+      `I want to understand ${topic} better before making this decision. ` +
+      `I'm considering ${dtLabel} ${session.assetName || session.ticker}` +
+      (session.ticker ? ` (${session.ticker})` : '') + `. ` +
+      `Help me think through this.`;
+    router.push({ pathname: '/(tabs)/chat', params: { seed: msg } });
   }
 
   // ── Return from Learn Mode: auto-open RuleWizard if category param present ─
@@ -574,15 +737,19 @@ function InterceptWizard() {
       {/* ── Wizard header ── */}
       <View style={s.header}>
         <View style={s.headerTop}>
-          {session.currentStep > 1 ? (
-            <TouchableOpacity onPress={goBack} style={s.backBtn} activeOpacity={0.6}>
+          {session.currentStep > 1 || showGate ? (
+            <TouchableOpacity
+              onPress={showGate ? handleGateBack : goBack}
+              style={s.backBtn}
+              activeOpacity={0.6}
+            >
               <Ionicons name="chevron-back" size={22} color={W} />
             </TouchableOpacity>
           ) : (
             <View style={s.backBtn} />
           )}
           <Text style={s.headerTitle}>Intercept</Text>
-          {session.currentStep > 1 ? (
+          {session.currentStep > 1 || showGate ? (
             <TouchableOpacity onPress={resetWizard} style={s.backBtn} activeOpacity={0.6}>
               <Ionicons name="close" size={20} color={G2} />
             </TouchableOpacity>
@@ -593,9 +760,9 @@ function InterceptWizard() {
           )}
         </View>
 
-        {/* Progress dots */}
+        {/* Progress dots — 3 steps */}
         <View style={s.dots}>
-          {([1, 2, 3, 4] as const).map((n) => (
+          {([1, 2, 3] as const).map((n) => (
             <View
               key={n}
               style={[s.dot, session.currentStep === n && s.dotActive,
@@ -605,12 +772,23 @@ function InterceptWizard() {
         </View>
 
         <Text style={s.headerSub}>
-          {checkingRules ? 'Checking your playbook…' : STEP_SUBTITLES[session.currentStep]}
+          {session.currentStep === 3 && noraStreaming
+            ? 'Checking your playbook…'
+            : showGate
+              ? 'Is this trade part of your plan?'
+              : STEP_SUBTITLES[session.currentStep]}
         </Text>
       </View>
 
       {/* ── Step content ── */}
-      {session.currentStep === 1 && (
+      {session.currentStep === 1 && showGate && (
+        <PlannedTradeGate
+          onPartOfPlan={advanceFromGateToStep3Planned}
+          onJustCameUp={advanceFromGateToStep2}
+        />
+      )}
+
+      {session.currentStep === 1 && !showGate && (
         <Step1
           decisionType={session.decisionType}
           tickerInfo={tickerInfo}
@@ -620,7 +798,7 @@ function InterceptWizard() {
           priceLoading={priceLoading}
           onSelectDecision={selectDecisionType}
           onSelectTicker={handleTickerChange}
-          onNext={advanceToStep2}
+          onNext={handleStep1Continue}
           canNext={step1Ready}
         />
       )}
@@ -638,31 +816,61 @@ function InterceptWizard() {
       {session.currentStep === 3 && (
         <Step3
           session={session}
-          checkingRules={checkingRules}
+          noraStreamingText={noraStreamingText}
+          noraStreaming={noraStreaming}
           vaultHolding={vaultHolding}
           livePrice={livePrice}
           liveCurrency={liveCurrency}
           convictions={convictions}
-          onNext={advanceToStep4}
-          onTalkItThrough={handleTalkItThrough}
-          onLearnFirst={handleLearnFirst}
-          onProceedNow={advanceToStep4}
-        />
-      )}
-
-      {session.currentStep === 4 && (
-        <Step4
-          session={session}
-          livePrice={livePrice}
-          liveCurrency={liveCurrency}
           logging={logging}
           onFollowPlaybook={handleFollowPlaybook}
           onOverride={handleOverride}
-          onBuildRuleFirst={handleBuildRuleFirst}
-          onProceedAnyway={handleProceedAnyway}
+          onTalkItThrough={handleTalkItThrough}
+          onLearnFirst={handleLearnFirst}
+          onBuildRuleNow={handleBuildRuleFirst}
+          onProceedAnyway={handleGapProceedAnyway}
         />
       )}
     </SafeAreaView>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PLANNED TRADE GATE (Step 1.5)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function PlannedTradeGate({
+  onPartOfPlan, onJustCameUp,
+}: { onPartOfPlan: () => void; onJustCameUp: () => void }) {
+  return (
+    <View style={s.stepFlex}>
+      <View style={s.gateContent}>
+        <Text style={s.gateQuestion}>
+          Is this trade already part of your plan?
+        </Text>
+        <Text style={s.gateSub}>
+          This changes how Nora coaches you through it.
+        </Text>
+
+        <TouchableOpacity style={s.gatePrimaryBtn} onPress={onPartOfPlan} activeOpacity={0.8}>
+          <Ionicons name="checkmark-circle-outline" size={20} color={GOLD} />
+          <View style={s.gateBtnBody}>
+            <Text style={s.gatePrimaryBtnText}>Part of my plan</Text>
+            <Text style={s.gateBtnSub}>I planned this — just need a sizing or timing check</Text>
+          </View>
+          <Ionicons name="arrow-forward" size={16} color={GOLD} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={s.gateSecondaryBtn} onPress={onJustCameUp} activeOpacity={0.8}>
+          <Ionicons name="flash-outline" size={20} color={G1} />
+          <View style={s.gateBtnBody}>
+            <Text style={s.gateSecondaryBtnText}>Just came up</Text>
+            <Text style={s.gateBtnSub}>This is a fresh impulse — run the full check</Text>
+          </View>
+          <Ionicons name="arrow-forward" size={16} color={G2} />
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -830,29 +1038,33 @@ function Step2({ decisionType, selectedTriggers, onToggle, onNext, canNext }: St
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// STEP 3 — TRIAGE
+// STEP 3 — TRIAGE + VERDICT (combined)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 interface Step3Props {
-  session:        InterceptSession;
-  checkingRules:  boolean;
-  vaultHolding:   any | null;
-  livePrice:      number | null;
-  liveCurrency:   string;
-  convictions:    Conviction[];
-  onNext:         () => void;
-  onTalkItThrough:() => void;
-  onLearnFirst:   () => void;
-  onProceedNow:   () => void;
+  session:          InterceptSession;
+  noraStreamingText:string;
+  noraStreaming:    boolean;
+  vaultHolding:    any | null;
+  livePrice:       number | null;
+  liveCurrency:    string;
+  convictions:     Conviction[];
+  logging:         boolean;
+  onFollowPlaybook:() => void;
+  onOverride:      () => void;
+  onTalkItThrough: () => void;
+  onLearnFirst:    () => void;
+  onBuildRuleNow:  () => void;
+  onProceedAnyway: () => void;
 }
 
 function Step3({
-  session, checkingRules, vaultHolding, livePrice, liveCurrency,
-  convictions, onNext, onTalkItThrough, onLearnFirst, onProceedNow,
+  session, noraStreamingText, noraStreaming, vaultHolding, livePrice, liveCurrency,
+  convictions, logging, onFollowPlaybook, onOverride, onTalkItThrough,
+  onLearnFirst, onBuildRuleNow, onProceedAnyway,
 }: Step3Props) {
   const { rulesMatched, playbookGapDetected } = session;
 
-  // Check for a relevant conviction (belief=yes or still-forming) for this asset
   const relevantConviction = useMemo(() => {
     const theme = tickerToConvictionTheme(session.ticker, session.assetName);
     if (!theme) return null;
@@ -860,15 +1072,6 @@ function Step3({
       (c) => c.theme === theme && (c.belief === 'yes' || c.belief === 'still-forming'),
     ) ?? null;
   }, [convictions, session.ticker, session.assetName]);
-
-  if (checkingRules) {
-    return (
-      <View style={[s.stepFlex, s.center]}>
-        <ActivityIndicator size="large" color={GOLD} />
-        <Text style={s.checkingText}>Scanning your playbook…</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={s.stepFlex}>
@@ -887,8 +1090,20 @@ function Step3({
           />
         )}
 
-        {/* Rules matched */}
-        {!playbookGapDetected ? (
+        {/* Nora coaching response (streaming) */}
+        <View style={s.noraResponseCard}>
+          {noraStreaming && noraStreamingText.length === 0 ? (
+            <ActivityIndicator size="small" color={GOLD} />
+          ) : (
+            <Text style={s.noraResponseText}>{noraStreamingText}</Text>
+          )}
+          {noraStreaming && noraStreamingText.length > 0 && (
+            <ActivityIndicator size="small" color={GOLD} style={{ marginTop: 8 }} />
+          )}
+        </View>
+
+        {/* Rules matched case */}
+        {!playbookGapDetected && (
           <>
             <Text style={s.triageSummary}>
               Your playbook has{' '}
@@ -897,26 +1112,35 @@ function Step3({
               </Text>
               {' '}for this moment.
             </Text>
-
             {rulesMatched.map((rule) => (
-              <TriageRuleCard key={rule.id} rule={rule} />
+              <RuleCard key={rule.id} rule={rule} />
             ))}
+            {relevantConviction && (
+              <View style={s.convictionRefCard}>
+                <Ionicons name="bulb-outline" size={16} color={GOLD} />
+                <View style={s.convictionRefBody}>
+                  <Text style={s.convictionRefTitle}>Your worldview</Text>
+                  <Text style={s.convictionRefText}>
+                    You{relevantConviction.belief === 'still-forming' ? ' may believe' : ' believe'} in{' '}
+                    <Text style={s.convictionRefBold}>{CONVICTION_THEME_LABEL[relevantConviction.theme]}</Text>.
+                    {' '}Is this decision consistent with that?
+                  </Text>
+                </View>
+              </View>
+            )}
           </>
-        ) : (
-          /* No rules matched */
+        )}
+
+        {/* Gap case — 4 options */}
+        {playbookGapDetected && (
           <View style={s.noRulesCard}>
             <Ionicons name="alert-circle-outline" size={32} color={GOLD} />
             <Text style={s.noRulesTitle}>You don't have a rule for this yet.</Text>
             <Text style={s.noRulesBody}>
-              Would you like to understand {session.assetName || session.ticker} better before you decide?
+              No rule in your playbook covers this exact situation. What would you like to do?
             </Text>
 
-            {/* Primary: Learn Mode — focused topic education */}
-            <TouchableOpacity
-              style={s.learnFirstBtn}
-              onPress={onLearnFirst}
-              activeOpacity={0.8}
-            >
+            <TouchableOpacity style={s.learnFirstBtn} onPress={onLearnFirst} activeOpacity={0.8}>
               <Ionicons name="school-outline" size={16} color={GOLD} />
               <Text style={s.learnFirstBtnText}>
                 Learn about {session.assetName || session.ticker} first
@@ -925,189 +1149,44 @@ function Step3({
             </TouchableOpacity>
 
             <View style={s.noRulesActions}>
-              <TouchableOpacity
-                style={s.learnBtn}
-                onPress={onTalkItThrough}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={s.learnBtn} onPress={onTalkItThrough} activeOpacity={0.7}>
                 <Text style={s.learnBtnText}>Talk it through</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={s.decideNowBtn}
-                onPress={onProceedNow}
-                activeOpacity={0.7}
-              >
-                <Text style={s.decideNowBtnText}>Decide now</Text>
+              <TouchableOpacity style={s.learnBtn} onPress={onBuildRuleNow} activeOpacity={0.7}>
+                <Text style={s.learnBtnText}>Build a rule now</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        )}
 
-        {/* Conviction reflection card — shown when user holds a relevant worldview */}
-        {relevantConviction && (
-          <View style={s.convictionRefCard}>
-            <Ionicons name="bulb-outline" size={16} color={GOLD} />
-            <View style={s.convictionRefBody}>
-              <Text style={s.convictionRefTitle}>Your worldview</Text>
-              <Text style={s.convictionRefText}>
-                You{relevantConviction.belief === 'still-forming' ? ' may believe' : ' believe'} in{' '}
-                <Text style={s.convictionRefBold}>{CONVICTION_THEME_LABEL[relevantConviction.theme]}</Text>.
-                {' '}Is this decision consistent with that?
-              </Text>
-            </View>
+            <TouchableOpacity style={s.talkLink} onPress={onProceedAnyway} activeOpacity={0.6}>
+              <Text style={s.talkLinkText}>Proceed anyway →</Text>
+            </TouchableOpacity>
           </View>
-        )}
-
-        {/* "Talk it through" secondary link */}
-        {!playbookGapDetected && (
-          <TouchableOpacity style={s.talkLink} onPress={onTalkItThrough} activeOpacity={0.6}>
-            <Text style={s.talkLinkText}>Talk it through with Nora →</Text>
-          </TouchableOpacity>
         )}
       </ScrollView>
 
-      <View style={s.footer}>
-        <TouchableOpacity style={s.nextBtn} onPress={onNext} activeOpacity={0.8}>
-          <Text style={s.nextBtnText}>See verdict</Text>
-          <Ionicons name="arrow-forward" size={18} color={BG} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-// TriageRuleCard → uses shared RuleCard component (expandable, shows origin + bias)
-function TriageRuleCard({ rule }: { rule: PlaybookRule }) {
-  return <RuleCard rule={rule} />;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// STEP 4 — VERDICT
-// ═══════════════════════════════════════════════════════════════════════════════
-
-interface Step4Props {
-  session:          InterceptSession;
-  livePrice:        number | null;
-  liveCurrency:     string;
-  logging:          boolean;
-  onFollowPlaybook: () => void;
-  onOverride:       () => void;
-  onBuildRuleFirst: () => void;
-  onProceedAnyway:  () => void;
-}
-
-function Step4({
-  session, livePrice, liveCurrency, logging,
-  onFollowPlaybook, onOverride, onBuildRuleFirst, onProceedAnyway,
-}: Step4Props) {
-  const { rulesMatched, playbookGapDetected, ticker, assetName, decisionType } = session;
-  const hasRules = !playbookGapDetected && rulesMatched.length > 0;
-
-  const verdictAction =
-    decisionType === 'buy'  ? "Don't buy yet." :
-    decisionType === 'sell' ? "Don't sell yet." :
-                              "Don't act yet.";
-
-  const dtLabel =
-    decisionType === 'buy'  ? 'Buy'  :
-    decisionType === 'sell' ? 'Sell' : 'Unsure';
-
-  return (
-    <ScrollView
-      style={s.stepScroll}
-      contentContainerStyle={[s.stepContent, { paddingBottom: 8 }]}
-      showsVerticalScrollIndicator={false}
-    >
-      {hasRules ? (
-        <>
-          {/* Verdict hero card */}
-          <View style={s.verdictCard}>
-            <View style={s.verdictCardHeader}>
-              <Ionicons name="shield-checkmark" size={22} color={GOLD} />
-              <Text style={s.verdictCardHeaderText}>Follow your playbook</Text>
-            </View>
-
-            <View style={s.verdictMeta}>
-              <View style={s.verdictMetaRow}>
-                <Text style={s.verdictTicker}>{ticker}</Text>
-                <View style={s.verdictDtBadge}>
-                  <Text style={s.verdictDtBadgeText}>{dtLabel}</Text>
-                </View>
-              </View>
-              <Text style={s.verdictAssetName}>{assetName}</Text>
-              {livePrice && (
-                <Text style={s.verdictPrice}>
-                  {liveCurrency} {fmt(livePrice)}
-                </Text>
-              )}
-            </View>
-
-            <View style={s.verdictRuleSummary}>
-              <Text style={s.verdictRuleCount}>
-                {rulesMatched.length} rule{rulesMatched.length !== 1 ? 's' : ''} triggered
-              </Text>
-              <Text style={s.verdictRecommendation}>
-                Your playbook says: <Text style={s.verdictRecommendationBold}>{verdictAction}</Text>
-              </Text>
-            </View>
-          </View>
-
-          {/* Action buttons */}
+      {/* Action buttons — rules matched case only */}
+      {!playbookGapDetected && (
+        <View style={s.footer}>
           <TouchableOpacity
-            style={[s.followBtn, logging && s.followBtnOff]}
+            style={[s.nextBtn, logging && { opacity: 0.5 }]}
             onPress={onFollowPlaybook}
             disabled={logging}
             activeOpacity={0.8}
           >
             {logging
               ? <ActivityIndicator color={BG} />
-              : <Text style={s.followBtnText}>Follow Playbook</Text>
+              : <Text style={s.nextBtnText}>Follow Playbook</Text>
             }
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={s.overrideBtn}
-            onPress={onOverride}
-            disabled={logging}
-            activeOpacity={0.7}
-          >
+          <TouchableOpacity style={s.talkItThroughBtn} onPress={onTalkItThrough} activeOpacity={0.7}>
+            <Text style={s.talkItThroughBtnText}>Talk it through with Nora</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.overrideBtn} onPress={onOverride} disabled={logging} activeOpacity={0.7}>
             <Text style={s.overrideBtnText}>Override and proceed</Text>
           </TouchableOpacity>
-        </>
-      ) : (
-        <>
-          {/* No rules */}
-          <View style={s.noRulesVerdictCard}>
-            <Ionicons name="compass-outline" size={32} color={GOLD} style={{ marginBottom: 12 }} />
-            <Text style={s.noRulesVerdictTitle}>You're in new territory.</Text>
-            <Text style={s.noRulesVerdictBody}>
-              Your playbook doesn't have a rule for this combination yet. You have two options.
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            style={s.buildRuleBtn}
-            onPress={onBuildRuleFirst}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="add-circle-outline" size={18} color={GOLD} />
-            <Text style={s.buildRuleBtnText}>Build a rule first</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[s.overrideBtn, { marginTop: 0 }]}
-            onPress={onProceedAnyway}
-            disabled={logging}
-            activeOpacity={0.7}
-          >
-            {logging
-              ? <ActivityIndicator color={G1} />
-              : <Text style={s.overrideBtnText}>Proceed anyway</Text>
-            }
-          </TouchableOpacity>
-        </>
+        </View>
       )}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -1199,7 +1278,14 @@ function ConsciousProceedSheet({
                     <View style={[s.miniRadio, overrideRuleId === rule.id && s.miniRadioSel]}>
                       {overrideRuleId === rule.id && <View style={s.miniRadioDot} />}
                     </View>
-                    <Text style={s.rulePickLabel} numberOfLines={2}>{rule.title}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.rulePickLabel} numberOfLines={2}>{rule.title}</Text>
+                      {rule.overrideCount > 0 && (
+                        <Text style={s.ruleOverrideCount}>
+                          Overridden {rule.overrideCount} time{rule.overrideCount !== 1 ? 's' : ''}
+                        </Text>
+                      )}
+                    </View>
                   </TouchableOpacity>
                 ))}
                 <TouchableOpacity
@@ -1450,9 +1536,68 @@ const s = StyleSheet.create({
   triggerLabel:    { flex: 1, fontSize: 15, color: G1, lineHeight: 21, fontFamily: BODY },
   triggerLabelSel: { color: W },
 
-  // ── Step 3: triage ────────────────────────────────────────────────────────
-  checkingText:   { fontSize: 16, color: G1, fontFamily: BODY, marginTop: 16, textAlign: 'center' },
+  // ── Gate (Step 1.5) ───────────────────────────────────────────────────────
+  gateContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    gap: 16,
+  },
+  gateQuestion: { fontSize: 20, fontFamily: SERIF_BOLD, color: W, letterSpacing: 0.1, lineHeight: 28 },
+  gateSub:      { fontSize: 14, color: G1, fontFamily: BODY, fontStyle: 'italic', marginBottom: 4 },
+  gatePrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: S_HIGH,
+    borderRadius: R,
+    borderLeftWidth: 2,
+    borderLeftColor: GOLD,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  gateSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: S1,
+    borderRadius: R,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  gateBtnBody:         { flex: 1, gap: 3 },
+  gatePrimaryBtnText:  { fontSize: 16, fontFamily: SERIF_SEMI, color: GOLD },
+  gateSecondaryBtnText:{ fontSize: 16, fontFamily: SERIF_SEMI, color: W },
+  gateBtnSub:          { fontSize: 13, color: G2, fontFamily: BODY, fontStyle: 'italic' },
 
+  // ── Step 3: Nora response card ────────────────────────────────────────────
+  noraResponseCard: {
+    backgroundColor: S1,
+    borderRadius: R,
+    borderLeftWidth: 2,
+    borderLeftColor: GOLD,
+    padding: 16,
+    minHeight: 48,
+  },
+  noraResponseText: {
+    fontSize: 14,
+    color: G1,
+    fontFamily: BODY,
+    fontStyle: 'italic',
+    lineHeight: 21,
+  },
+
+  // ── Step 3: action buttons ────────────────────────────────────────────────
+  talkItThroughBtn: {
+    backgroundColor: S1,
+    borderRadius: R_SM,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  talkItThroughBtnText: { color: G1, fontSize: 14, fontFamily: SERIF, fontStyle: 'italic' },
+
+  // ── Step 3: triage ────────────────────────────────────────────────────────
   triageSummary:      { fontSize: 14, color: G1, fontFamily: BODY, lineHeight: 20 },
   triageSummaryBold:  { color: W, fontWeight: '600' },
 
@@ -1505,12 +1650,6 @@ const s = StyleSheet.create({
     paddingVertical: 13, alignItems: 'center',
   },
   learnBtnText:     { color: G1, fontSize: 14, fontFamily: SERIF },
-  decideNowBtn:     {
-    flex: 1, backgroundColor: BG_DEEP,
-    borderRadius: R_SM, paddingVertical: 13, alignItems: 'center',
-  },
-  decideNowBtnText: { color: G2, fontSize: 14, fontFamily: BODY },
-
   talkLink:     { alignSelf: 'center', paddingVertical: 6 },
   talkLinkText: { fontSize: 13, color: G2, textDecorationLine: 'underline', fontFamily: BODY },
 
@@ -1530,56 +1669,6 @@ const s = StyleSheet.create({
   convictionRefText:  { fontSize: 13, color: G1, fontFamily: BODY, fontStyle: 'italic', lineHeight: 19 },
   convictionRefBold:  { color: W, fontFamily: SERIF_SEMI, fontStyle: 'normal' },
 
-  // ── Step 4: verdict ───────────────────────────────────────────────────────
-  verdictCard: {
-    backgroundColor: S1,
-    borderRadius: R,
-    borderLeftWidth: 2,
-    borderLeftColor: GOLD,
-    overflow: 'hidden',
-  },
-  verdictCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: S_HIGH,
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-  },
-  verdictCardHeaderText: { fontSize: 13, fontFamily: BODY, color: GOLD, textTransform: 'uppercase', letterSpacing: 0.8 },
-  verdictMeta:    { paddingHorizontal: 18, paddingTop: 16, paddingBottom: 4, gap: 4 },
-  verdictMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  verdictTicker:  { fontSize: 22, fontFamily: SERIF_BOLD, color: W },
-  verdictDtBadge: {
-    backgroundColor: BG_DEEP, borderRadius: R_SM,
-    paddingHorizontal: 8, paddingVertical: 3,
-  },
-  verdictDtBadgeText: { fontSize: 11, fontFamily: BODY, color: G2, textTransform: 'uppercase', letterSpacing: 0.5 },
-  verdictAssetName:   { fontSize: 14, color: G1, fontFamily: BODY },
-  verdictPrice:       { fontSize: 13, color: G2, fontVariant: ['tabular-nums'] },
-
-  verdictRuleSummary: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: LINE,
-    marginTop: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
-    gap: 6,
-  },
-  verdictRuleCount:          { fontSize: 11, color: G2, fontFamily: BODY, textTransform: 'uppercase', letterSpacing: 0.5 },
-  verdictRecommendation:     { fontSize: 15, color: G1, fontFamily: SERIF, fontStyle: 'italic', lineHeight: 22 },
-  verdictRecommendationBold: { color: W, fontFamily: SERIF_BOLD, fontStyle: 'normal' },
-
-  followBtn: {
-    backgroundColor: GOLD,
-    borderRadius: R_SM,
-    paddingVertical: 17,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  followBtnOff:  { opacity: 0.5 },
-  followBtnText: { color: ON_PRIMARY, fontSize: 15, fontFamily: SERIF_BOLD },
-
   overrideBtn: {
     backgroundColor: S1,
     borderRadius: R_SM,
@@ -1588,30 +1677,6 @@ const s = StyleSheet.create({
     marginTop: 10,
   },
   overrideBtnText: { color: G1, fontSize: 14, fontFamily: BODY },
-
-  noRulesVerdictCard: {
-    backgroundColor: S1,
-    borderRadius: R,
-    padding: 24,
-    alignItems: 'center',
-    gap: 8,
-  },
-  noRulesVerdictTitle: { fontSize: 19, fontFamily: SERIF_BOLD, color: W, textAlign: 'center' },
-  noRulesVerdictBody:  { fontSize: 14, color: G1, fontFamily: BODY, fontStyle: 'italic', lineHeight: 21, textAlign: 'center' },
-
-  buildRuleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: S_HIGH,
-    borderLeftWidth: 2,
-    borderLeftColor: GOLD,
-    borderRadius: R_SM,
-    paddingVertical: 17,
-    marginTop: 16,
-  },
-  buildRuleBtnText: { color: GOLD, fontSize: 14, fontFamily: SERIF, fontStyle: 'italic' },
 
   // ── Conscious Proceed sheet ───────────────────────────────────────────────
   sheetOverlay: {
@@ -1651,8 +1716,9 @@ const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: LINE,
   },
-  rulePickRowSel: {},
-  rulePickLabel:  { flex: 1, fontSize: 14, color: G1, fontFamily: BODY, lineHeight: 19 },
+  rulePickRowSel:    {},
+  rulePickLabel:     { fontSize: 14, color: G1, fontFamily: BODY, lineHeight: 19 },
+  ruleOverrideCount: { fontSize: 11, color: G2, fontFamily: BODY, marginTop: 2 },
   miniRadio: {
     width: 18, height: 18, borderRadius: 2,
     borderWidth: 1.5, borderColor: G3,

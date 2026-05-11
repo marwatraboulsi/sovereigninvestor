@@ -153,4 +153,37 @@ const markdownStyles = {
     marginTop: 0,
     marginBottom: 6,
   },
+  table: {
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 6,
+    marginVertical: 8,
+    overflow: 'hidden' as const,
+  },
+  thead: {
+    backgroundColor: '#0F172A',
+  },
+  tbody: {
+    backgroundColor: '#1E293B',
+  },
+  th: {
+    color: '#F1F5F9',
+    fontWeight: '700' as const,
+    fontSize: 12,
+    padding: 8,
+    borderColor: '#334155',
+    borderRightWidth: 1,
+  },
+  td: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    padding: 8,
+    borderColor: '#334155',
+    borderRightWidth: 1,
+  },
+  tr: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+    flexDirection: 'row' as const,
+  },
 };

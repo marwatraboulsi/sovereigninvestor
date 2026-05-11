@@ -8,7 +8,7 @@
 
 import { useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { PlaybookRule, DecisionType, DecisionTrigger, RuleStatus } from '@/types';
+import type { PlaybookRule, DecisionType, DecisionTrigger, RuleCategory, RuleStatus } from '@/types';
 
 // ─── DB row → TypeScript ──────────────────────────────────────────────────────
 
@@ -24,6 +24,9 @@ function rowToRule(row: any): PlaybookRule {
     createdAt:            row.created_at,
     status:               row.status,
     overrideCount:        row.override_count,
+    // Existing rows without these columns default to matching all decisions / no triggers
+    decisionTypes:        row.decision_types?.length ? row.decision_types : ['buy', 'sell', 'unsure'],
+    triggerTags:          row.trigger_tags ?? [],
   };
 }
 
@@ -77,6 +80,8 @@ export function usePlaybook() {
           created_at:            Date.now(),
           status:                rule.status ?? 'active',
           override_count:        0,
+          decision_types:        rule.decisionTypes ?? [],
+          trigger_tags:          rule.triggerTags ?? [],
         })
         .select()
         .single();
@@ -103,6 +108,8 @@ export function usePlaybook() {
       if (updates.structuredConditions  !== undefined) dbUpdates.structured_conditions  = updates.structuredConditions;
       if (updates.status                !== undefined) dbUpdates.status                = updates.status;
       if (updates.overrideCount         !== undefined) dbUpdates.override_count         = updates.overrideCount;
+      if (updates.decisionTypes         !== undefined) dbUpdates.decision_types         = updates.decisionTypes;
+      if (updates.triggerTags           !== undefined) dbUpdates.trigger_tags           = updates.triggerTags;
 
       const { error } = await supabase
         .from('playbook_rules')
@@ -142,14 +149,42 @@ export function usePlaybook() {
   }, []);
 
   /**
-   * Returns active rules relevant to the given decision type and triggers.
-   * Phase 3: returns all active rules (smart category/trigger matching in Phase 4).
+   * Returns up to 3 active rules most relevant to the given decision type and
+   * emotional triggers. Scoring: +2 decisionType match, +2 any trigger match,
+   * +1 per additional trigger match. Threshold: score >= 2.
    */
   const matchRules = useCallback((
-    _decisionType: DecisionType,
-    _triggers: DecisionTrigger[],
+    decisionType: DecisionType,
+    triggers: DecisionTrigger[],
   ): PlaybookRule[] => {
-    return rules.filter((r) => r.status === 'active');
+    return rules
+      .filter((r) => r.status === 'active')
+      .map((r) => {
+        let score = 0;
+        if (r.decisionTypes.includes(decisionType)) score += 2;
+        const triggerMatches = triggers.filter((t) => r.triggerTags.includes(t));
+        if (triggerMatches.length > 0) score += 2;
+        if (triggerMatches.length > 1) score += triggerMatches.length - 1;
+        return { rule: r, score };
+      })
+      .filter(({ score }) => score >= 2)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map(({ rule }) => rule);
+  }, [rules]);
+
+  /**
+   * Planned trade variant — filters to position-sizing, timing, and tax-awareness
+   * rules that match the decision type. No trigger scoring. Max 2 results.
+   */
+  const matchRulesForPlannedTrade = useCallback((
+    decisionType: DecisionType,
+  ): PlaybookRule[] => {
+    const plannedCategories: RuleCategory[] = ['position-sizing', 'timing', 'tax-awareness'];
+    return rules
+      .filter((r) => r.status === 'active' && plannedCategories.includes(r.category))
+      .filter((r) => r.decisionTypes.includes(decisionType))
+      .slice(0, 2);
   }, [rules]);
 
   return {
@@ -161,5 +196,6 @@ export function usePlaybook() {
     pauseRule,
     removeRule,
     matchRules,
+    matchRulesForPlannedTrade,
   };
 }

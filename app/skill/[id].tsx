@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
@@ -24,11 +24,14 @@ import { SKILL_METADATA } from '@/skills';
 import { MessageBubble } from '@/components/MessageBubble';
 import { SkillOptionPicker } from '@/components/SkillOptionPicker';
 import { SkillProgress } from '@/components/SkillProgress';
+import { TickerSearch } from '@/components/TickerSearch';
+import { ScrollThumb } from '@/components/ScrollThumb';
 import { parseSkillMessage } from '@/utils/parseSkillOptions';
 import { detectThemeFromText, CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
+import type { TickerInfo } from '@/data/tickerSearch';
 import type { SkillId, ConvictionTheme, ConvictionBelief } from '@/types';
 
-import { BG, S1, LINE, W, GOLD, G1, G2 } from '@/theme';
+import { BG, S1, LINE, W, GOLD, G1, G2, R_SM, SERIF_SEMI } from '@/theme';
 
 const VALID_SKILL_IDS: SkillId[] = [
   'etf-analyzer',
@@ -41,10 +44,337 @@ function isValidSkillId(id: string): id is SkillId {
   return VALID_SKILL_IDS.includes(id as SkillId);
 }
 
+// ─── Small reusable form pieces ───────────────────────────────────────────────
+
+function QuestionSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <View style={qStyles.section}>
+      <Text style={qStyles.sectionLabel}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+function PillGroup({
+  options,
+  value,
+  onChange,
+}: {
+  options: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <View style={qStyles.pillRow}>
+      {options.map((opt) => (
+        <TouchableOpacity
+          key={opt}
+          style={[qStyles.pill, value === opt && qStyles.pillSelected]}
+          onPress={() => onChange(opt)}
+          activeOpacity={0.7}
+        >
+          <Text style={[qStyles.pillText, value === opt && qStyles.pillTextSelected]}>
+            {opt}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+}
+
+function MultiPillGroup({
+  options,
+  values,
+  onChange,
+  max,
+}: {
+  options: string[];
+  values: string[];
+  onChange: (v: string[]) => void;
+  max: number;
+}) {
+  const toggle = (opt: string) => {
+    if (values.includes(opt)) {
+      onChange(values.filter((v) => v !== opt));
+    } else if (values.length < max) {
+      onChange([...values, opt]);
+    }
+  };
+  return (
+    <View style={qStyles.pillRow}>
+      {options.map((opt) => {
+        const selected = values.includes(opt);
+        const disabled = !selected && values.length >= max;
+        return (
+          <TouchableOpacity
+            key={opt}
+            style={[qStyles.pill, selected && qStyles.pillSelected, disabled && qStyles.pillDisabled]}
+            onPress={() => toggle(opt)}
+            activeOpacity={0.7}
+            disabled={disabled}
+          >
+            <Text style={[qStyles.pillText, selected && qStyles.pillTextSelected, disabled && qStyles.pillTextDisabled]}>
+              {opt}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+// ─── Compare picker form ──────────────────────────────────────────────────────
+// Shown after ticker selection. User chooses whether to run a comparison session.
+
+function ComparePickerForm({
+  ticker,
+  compareTicker,
+  onCompareTicker,
+  onBack,
+  onNext,
+}: {
+  ticker: TickerInfo;
+  compareTicker: TickerInfo | null;
+  onCompareTicker: (t: TickerInfo | null) => void;
+  onBack: () => void;
+  onNext: () => void;
+}) {
+  const [mode, setMode] = useState<'solo' | 'compare' | null>(null);
+
+  const canProceed = mode === 'solo' || (mode === 'compare' && !!compareTicker);
+
+  const handleNext = () => {
+    if (mode === 'solo') onCompareTicker(null);
+    onNext();
+  };
+
+  return (
+    <View style={qStyles.container}>
+      <TouchableOpacity onPress={onBack} style={qStyles.backBtn} activeOpacity={0.7}>
+        <Ionicons name="arrow-back" size={14} color={G2} />
+        <Text style={qStyles.backBtnText}>Change ticker</Text>
+      </TouchableOpacity>
+
+      <Text style={qStyles.tickerLabel}>{ticker.ticker} · {ticker.name}</Text>
+
+      <QuestionSection label="Session type">
+        <View style={qStyles.pillRow}>
+          <TouchableOpacity
+            style={[qStyles.pill, mode === 'solo' && qStyles.pillSelected]}
+            onPress={() => { setMode('solo'); onCompareTicker(null); }}
+            activeOpacity={0.7}
+          >
+            <Text style={[qStyles.pillText, mode === 'solo' && qStyles.pillTextSelected]}>
+              Deep dive on {ticker.ticker}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[qStyles.pill, mode === 'compare' && qStyles.pillSelected]}
+            onPress={() => setMode('compare')}
+            activeOpacity={0.7}
+          >
+            <Text style={[qStyles.pillText, mode === 'compare' && qStyles.pillTextSelected]}>
+              Compare against another stock
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </QuestionSection>
+
+      {mode === 'compare' && (
+        <View style={{ marginTop: 16, gap: 8 }}>
+          <Text style={qStyles.sectionLabel}>Compare against</Text>
+          <TickerSearch
+            value={compareTicker}
+            onChange={onCompareTicker}
+            placeholder="Search second ticker..."
+          />
+        </View>
+      )}
+
+      <TouchableOpacity
+        style={[qStyles.submitBtn, !canProceed && qStyles.submitBtnDisabled]}
+        onPress={handleNext}
+        disabled={!canProceed}
+        activeOpacity={0.8}
+      >
+        <Text style={qStyles.submitBtnText}>Next</Text>
+        <Ionicons name="arrow-forward" size={16} color={BG} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ─── Research questions form ──────────────────────────────────────────────────
+
+function ResearchQuestionsForm({
+  ticker,
+  compareTicker,
+  onBack,
+  onSubmit,
+}: {
+  ticker: TickerInfo;
+  compareTicker?: TickerInfo | null;
+  onBack: () => void;
+  onSubmit: (answers: string) => void;
+}) {
+  const [investmentStyle, setInvestmentStyle] = useState('');
+  const [holdingPeriod,   setHoldingPeriod]   = useState('');
+  const [riskTolerance,   setRiskTolerance]   = useState('');
+  const [focusAreas,      setFocusAreas]      = useState<string[]>([]);
+  const [researchDepth,   setResearchDepth]   = useState('');
+  const [concerns,        setConcerns]        = useState('');
+
+  const isValid =
+    !!investmentStyle &&
+    !!holdingPeriod &&
+    !!riskTolerance &&
+    focusAreas.length >= 1 &&
+    !!researchDepth;
+
+  const handleSubmit = () => {
+    if (!isValid) return;
+    const answers = [
+      `Investment style: ${investmentStyle}`,
+      `Holding period: ${holdingPeriod}`,
+      `Risk tolerance: ${riskTolerance}`,
+      `Focus areas: ${focusAreas.join(', ')}`,
+      `Research depth: ${researchDepth}`,
+      `Specific concerns: ${concerns.trim() || 'None'}`,
+    ].join('\n');
+    onSubmit(answers);
+  };
+
+  return (
+    <View style={qStyles.container}>
+      <TouchableOpacity onPress={onBack} style={qStyles.backBtn} activeOpacity={0.7}>
+        <Ionicons name="arrow-back" size={14} color={G2} />
+        <Text style={qStyles.backBtnText}>Back</Text>
+      </TouchableOpacity>
+
+      <Text style={qStyles.tickerLabel}>
+        {compareTicker
+          ? `${ticker.ticker} vs ${compareTicker.ticker}`
+          : `${ticker.ticker} · ${ticker.name}`}
+      </Text>
+
+      <QuestionSection label="Investment Style">
+        <PillGroup
+          options={['Value', 'Growth', 'Turnaround', 'Dividend']}
+          value={investmentStyle}
+          onChange={setInvestmentStyle}
+        />
+      </QuestionSection>
+
+      <QuestionSection label="Holding Period">
+        <PillGroup
+          options={['Short-term (<6 months)', 'Medium-term (6–18 months)', 'Long-term (1–3+ years)']}
+          value={holdingPeriod}
+          onChange={setHoldingPeriod}
+        />
+      </QuestionSection>
+
+      <QuestionSection label="Risk Tolerance">
+        <PillGroup
+          options={['Conservative', 'Balanced', 'Aggressive']}
+          value={riskTolerance}
+          onChange={setRiskTolerance}
+        />
+      </QuestionSection>
+
+      <QuestionSection label="Focus Areas (pick up to 3)">
+        <MultiPillGroup
+          options={['Business quality', 'Financial health', 'Industry dynamics', 'Governance', 'Valuation', 'Catalysts']}
+          values={focusAreas}
+          onChange={setFocusAreas}
+          max={3}
+        />
+      </QuestionSection>
+
+      <QuestionSection label="Research Depth">
+        <PillGroup
+          options={['Quick scan', 'Standard due diligence']}
+          value={researchDepth}
+          onChange={setResearchDepth}
+        />
+      </QuestionSection>
+
+      <QuestionSection label="Specific Concerns (optional)">
+        <TextInput
+          style={qStyles.concernsInput}
+          value={concerns}
+          onChangeText={setConcerns}
+          placeholder="Any red flags or specific areas to focus on?"
+          placeholderTextColor={G2}
+          multiline
+          maxLength={300}
+        />
+      </QuestionSection>
+
+      <TouchableOpacity
+        style={[qStyles.submitBtn, !isValid && qStyles.submitBtnDisabled]}
+        onPress={handleSubmit}
+        disabled={!isValid}
+        activeOpacity={0.8}
+      >
+        <Text style={qStyles.submitBtnText}>Start Research</Text>
+        <Ionicons name="arrow-forward" size={16} color={BG} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const qStyles = StyleSheet.create({
+  container: { width: '100%', paddingTop: 8, gap: 4 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, alignSelf: 'flex-start' },
+  backBtnText: { color: G2, fontSize: 13 },
+  tickerLabel: { color: W, fontSize: 16, fontWeight: '600', marginBottom: 8, marginTop: 4 },
+  section: { gap: 8, marginTop: 16 },
+  sectionLabel: { color: G2, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1 },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LINE,
+    backgroundColor: S1,
+  },
+  pillSelected: { backgroundColor: GOLD, borderColor: GOLD },
+  pillDisabled: { opacity: 0.35 },
+  pillText: { color: G1, fontSize: 13, fontWeight: '500' },
+  pillTextSelected: { color: BG, fontWeight: '700' },
+  pillTextDisabled: { color: G2 },
+  concernsInput: {
+    backgroundColor: S1,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LINE,
+    color: W,
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 60,
+    maxHeight: 100,
+  },
+  submitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: GOLD,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: 24,
+    marginTop: 24,
+  },
+  submitBtnDisabled: { opacity: 0.4 },
+  submitBtnText: { color: BG, fontSize: 15, fontWeight: '700' },
+});
+
+
+
+
 // ─── Outer component ──────────────────────────────────────────────────────────
-// Validates the route param BEFORE any hooks are called.
-// React requires hooks to be called the same number of times on every render,
-// so we must never call hooks before a conditional return.
 export default function SkillScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
@@ -60,22 +390,27 @@ export default function SkillScreen() {
 }
 
 // ─── Inner component ──────────────────────────────────────────────────────────
-// Only rendered when `id` is a valid SkillId. All hooks live here so they are
-// called unconditionally on every render of this component.
 function SkillScreenInner({ id }: { id: SkillId }) {
+  const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
   const [input, setInput] = useState('');
+  const [selectedTicker, setSelectedTicker] = useState<TickerInfo | null>(null);
+  const [compareTicker, setCompareTicker] = useState<TickerInfo | null>(null);
+  const [screenPhase, setScreenPhase] = useState<'ticker' | 'compare' | 'questions'>('ticker');
 
   // ── Progress tracking ──────────────────────────────────────────────────────
   const [elapsedMs, setElapsedMs]   = useState(0);
   const elapsedIntervalRef          = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Scroll-to-bottom button ────────────────────────────────────────────────
-  const [isAtBottom, setIsAtBottom] = useState(true);
+  // ── Scroll-to-bottom button + drag scrollbar ──────────────────────────────
+  const [isAtBottom,     setIsAtBottom]     = useState(true);
+  const [scrollY,        setScrollY]        = useState(0);
+  const [contentHeight,  setContentHeight]  = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
 
   const skill     = SKILL_METADATA[id];
   const vaultData = useVaultData();
-  const { messages, streamingText, isLoading, error, startedAt, sendMessage, clearSession, dismissError } =
+  const { messages, streamingText, isLoading, error, startedAt, phaseLabel, sendMessage, initResearch, clearSession, dismissError } =
     useSkillSession(id);
   const { isListening, isAvailable: micAvailable, toggle: toggleMic } = useSpeechInput({
     onResult: (text) => setInput((prev) => (prev ? prev + ' ' + text : text)),
@@ -85,18 +420,38 @@ function SkillScreenInner({ id }: { id: SkillId }) {
   const [slideSaved,          setSlideSaved]          = useState(false);
   const [slideError,          setSlideError]          = useState<string | null>(null);
   const [showToast,           setShowToast]           = useState(false);
-  // Conviction prompt — fires once per session for the first detected theme
   const [convictionResponded, setConvictionResponded] = useState(false);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wasLoading = useRef(false);
+  const toastTimer       = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wasLoading       = useRef(false);
+  const autoSaveTriggered = useRef(false);
+
+  // Reset ticker/questions phase when session is cleared
+  useEffect(() => {
+    if (messages.length === 0) {
+      setScreenPhase('ticker');
+      setSelectedTicker(null);
+      setCompareTicker(null);
+    }
+  }, [messages.length]);
 
   useEffect(() => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-  }, [messages.length, isLoading, streamingText]);
+    if (isAtBottom) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [messages.length, isLoading, streamingText, isAtBottom]);
 
-  // Show toast when loading starts (not when restoring a completed session)
+  // Reset auto-save flag only when the session is cleared
   useEffect(() => {
-    if (isLoading && !wasLoading.current) {
+    if (messages.length === 0) {
+      autoSaveTriggered.current = false;
+      setSlideSaved(false);
+      setSlideError(null);
+    }
+  }, [messages.length]);
+
+  // Show toast only when the initial analysis starts (not follow-up questions)
+  useEffect(() => {
+    if (isLoading && !wasLoading.current && !autoSaveTriggered.current) {
       setShowToast(true);
       toastTimer.current = setTimeout(() => setShowToast(false), 7500);
     }
@@ -106,12 +461,32 @@ function SkillScreenInner({ id }: { id: SkillId }) {
     };
   }, [isLoading]);
 
+  // Auto-save slides for all skills when analysis completes
+  useEffect(() => {
+    if (isLoading) return;
+    if (autoSaveTriggered.current) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant' || last.content.length < 400) return;
+    autoSaveTriggered.current = true;
+    (async () => {
+      const result = await generateSlides(last.content, id);
+      if (result) {
+        await saveAnalysisToArchive({
+          skillId: id,
+          skillName: skill.name,
+          title: result.title,
+          slides: result.slides,
+        });
+        setSlideSaved(true);
+      } else {
+        setSlideError('Could not auto-save slides.');
+      }
+    })();
+  }, [isLoading, messages]);
+
   // ── Elapsed time tracking ──────────────────────────────────────────────────
-  // Uses startedAt from the session store (survives navigation) so the progress
-  // bar continues from the correct position when the user navigates back.
   useEffect(() => {
     if (isLoading && startedAt !== null) {
-      // Immediately sync to actual elapsed time (catches up after navigation)
       setElapsedMs(Date.now() - startedAt);
       elapsedIntervalRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startedAt);
@@ -137,7 +512,6 @@ function SkillScreenInner({ id }: { id: SkillId }) {
     sendMessage(text);
   };
 
-  // Check if the last assistant message contains option pickers
   const lastMessage = messages[messages.length - 1];
   const lastParsed =
     lastMessage?.role === 'assistant' && !isLoading
@@ -145,11 +519,13 @@ function SkillScreenInner({ id }: { id: SkillId }) {
       : null;
   const hasOptions = (lastParsed?.questions.length ?? 0) > 0;
 
-  // ── Scroll event handler for scroll-to-bottom button ──────────────────────
   const handleScroll = useCallback((event: any) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
     const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
     setIsAtBottom(distanceFromBottom < 40);
+    setScrollY(contentOffset.y);
+    setContentHeight(contentSize.height);
+    setViewportHeight(layoutMeasurement.height);
   }, []);
 
   return (
@@ -161,24 +537,32 @@ function SkillScreenInner({ id }: { id: SkillId }) {
           </Text>
         </View>
       )}
-      <Stack.Screen
-        options={{
-          title: skill.name,
-          headerStyle: { backgroundColor: BG },
-          headerTintColor: W,
-          headerShadowVisible: false,
-          headerRight: () => (
-            <TouchableOpacity onPress={clearSession} style={styles.clearButton}>
-              <Text style={styles.clearButtonText}>New</Text>
-            </TouchableOpacity>
-          ),
-        }}
-      />
+      <Stack.Screen options={{ headerShown: false }} />
+
+      {/* Custom header — avoids native iOS button-group pill */}
+      <View style={styles.customHeader}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={24} color={W} />
+        </TouchableOpacity>
+        <Text style={styles.customHeaderTitle} numberOfLines={1}>{skill.name}</Text>
+        <View style={styles.customHeaderActions}>
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/research-history', params: { skillId: id } })}
+            activeOpacity={0.6}
+            style={styles.headerIconBtn}
+          >
+            <Ionicons name="time-outline" size={18} color={G2} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={clearSession} activeOpacity={0.6} style={styles.headerNewBtn}>
+            <Text style={styles.headerNewBtnText}>New</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
+        keyboardVerticalOffset={54}
       >
         <View style={styles.flex}>
           <ScrollView
@@ -191,21 +575,82 @@ function SkillScreenInner({ id }: { id: SkillId }) {
           >
             {messages.length === 0 && !isLoading && (
               <View style={styles.emptyState}>
-                <Text style={styles.emptyPrompt}>{skill.placeholder}</Text>
-                <Text style={styles.emptyFramework}>{skill.framework}</Text>
-
-                {id === 'portfolio-reviewer' && vaultData && vaultData.holdings.length > 0 && (
-                  <TouchableOpacity
-                    style={styles.vaultBtn}
-                    onPress={() => {
-                      const text = formatPortfolioForReview(vaultData);
-                      if (text) sendMessage(text);
-                    }}
-                    activeOpacity={0.75}
-                  >
-                    <Ionicons name="wallet-outline" size={16} color={BG} />
-                    <Text style={styles.vaultBtnText}>Analyse my Vault portfolio</Text>
-                  </TouchableOpacity>
+                {id === 'stock-researcher' ? (
+                  screenPhase === 'ticker' ? (
+                    <>
+                      <Text style={styles.emptyPrompt}>{skill.placeholder}</Text>
+                      <Text style={styles.emptyFramework}>{skill.framework}</Text>
+                      <View style={styles.tickerSearchWrapper}>
+                        <TickerSearch
+                          value={selectedTicker}
+                          onChange={setSelectedTicker}
+                          placeholder="Search ticker or company name..."
+                        />
+                        {selectedTicker && (
+                          <TouchableOpacity
+                            style={styles.startResearchBtn}
+                            onPress={() => setScreenPhase('compare')}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.startResearchBtnText}>Next</Text>
+                            <Ionicons name="arrow-forward" size={16} color={BG} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        style={styles.historyLink}
+                        onPress={() => router.push({ pathname: '/research-history', params: { skillId: id } })}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="time-outline" size={14} color={G2} />
+                        <Text style={styles.historyLinkText}>View past sessions</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : screenPhase === 'compare' ? (
+                    <ComparePickerForm
+                      ticker={selectedTicker!}
+                      compareTicker={compareTicker}
+                      onCompareTicker={setCompareTicker}
+                      onBack={() => setScreenPhase('ticker')}
+                      onNext={() => setScreenPhase('questions')}
+                    />
+                  ) : (
+                    <ResearchQuestionsForm
+                      ticker={selectedTicker!}
+                      compareTicker={compareTicker}
+                      onBack={() => setScreenPhase('compare')}
+                      onSubmit={(answers) => {
+                        initResearch(selectedTicker!, compareTicker ?? undefined);
+                        sendMessage(answers);
+                      }}
+                    />
+                  )
+                ) : (
+                  <>
+                    <Text style={styles.emptyPrompt}>{skill.placeholder}</Text>
+                    <Text style={styles.emptyFramework}>{skill.framework}</Text>
+                    {id === 'portfolio-reviewer' && vaultData && vaultData.holdings.length > 0 && (
+                      <TouchableOpacity
+                        style={styles.vaultBtn}
+                        onPress={() => {
+                          const text = formatPortfolioForReview(vaultData);
+                          if (text) sendMessage(text);
+                        }}
+                        activeOpacity={0.75}
+                      >
+                        <Ionicons name="wallet-outline" size={16} color={BG} />
+                        <Text style={styles.vaultBtnText}>Analyse my Vault portfolio</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={styles.historyLink}
+                      onPress={() => router.push({ pathname: '/research-history', params: { skillId: id } })}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="time-outline" size={14} color={G2} />
+                      <Text style={styles.historyLinkText}>View past sessions</Text>
+                    </TouchableOpacity>
+                  </>
                 )}
               </View>
             )}
@@ -229,16 +674,27 @@ function SkillScreenInner({ id }: { id: SkillId }) {
               );
             })}
 
-            {/* Progress indicator replaces raw streaming text */}
-            {isLoading && (
+            {/* Live streaming text + progress bar */}
+            {isLoading && streamingText ? (
+              <>
+                <MessageBubble role="assistant" content={streamingText} />
+                <SkillProgress
+                  skillId={id}
+                  streamingText={streamingText}
+                  elapsedMs={elapsedMs}
+                  phaseLabel={phaseLabel}
+                />
+              </>
+            ) : isLoading ? (
               <SkillProgress
                 skillId={id}
                 streamingText={streamingText}
                 elapsedMs={elapsedMs}
+                phaseLabel={phaseLabel}
               />
-            )}
+            ) : null}
 
-            {/* Save as Slides - appears after a long completed analysis */}
+            {/* Auto-save status — shown for all skills after analysis completes */}
             {(() => {
               const last = messages[messages.length - 1];
               if (!last || last.role !== 'assistant' || isLoading || last.content.length < 400) return null;
@@ -250,42 +706,19 @@ function SkillScreenInner({ id }: { id: SkillId }) {
                   </View>
                 );
               }
-              return (
-                <View style={styles.saveSlideRow}>
-                  {slideError ? (
-                    <Text style={styles.slideErrorText}>{slideError}</Text>
-                  ) : null}
-                  <TouchableOpacity
-                    style={[styles.saveSlidesBtn, isGenerating && styles.saveSlidesBtnDisabled]}
-                    onPress={async () => {
-                      setSlideError(null);
-                      const result = await generateSlides(last.content, id);
-                      if (result) {
-                        await saveAnalysisToArchive({
-                          skillId: id,
-                          skillName: skill.name,
-                          title: result.title,
-                          slides: result.slides,
-                        });
-                        setSlideSaved(true);
-                      } else {
-                        setSlideError('Could not generate slides. Try again.');
-                      }
-                    }}
-                    disabled={isGenerating}
-                    activeOpacity={0.75}
-                  >
-                    {isGenerating ? (
-                      <ActivityIndicator size="small" color={G2} />
-                    ) : (
-                      <Ionicons name="albums-outline" size={15} color={W} />
-                    )}
-                    <Text style={styles.saveSlidesBtnText}>
-                      {isGenerating ? 'Generating slides…' : 'Save as Slides'}
+              if (isGenerating || slideError) {
+                return (
+                  <View style={styles.slidesSavedBanner}>
+                    {isGenerating
+                      ? <ActivityIndicator size="small" color={G2} />
+                      : <Ionicons name="alert-circle-outline" size={16} color="#F87171" />}
+                    <Text style={[styles.slidesSavedText, slideError ? { color: '#F87171' } : { color: G2 }]}>
+                      {isGenerating ? 'Saving to Archive…' : slideError}
                     </Text>
-                  </TouchableOpacity>
-                </View>
-              );
+                  </View>
+                );
+              }
+              return null;
             })()}
 
             {/* Conviction prompt — Catalyst Scanner only, once per session */}
@@ -296,15 +729,12 @@ function SkillScreenInner({ id }: { id: SkillId }) {
               if (!last || last.role !== 'assistant' || isLoading || last.content.length < 200) return null;
               const detectedTheme: ConvictionTheme | null = detectThemeFromText(last.content);
               if (!detectedTheme) return null;
-              // Skip if user already has a conviction for this theme
               if (convictions.some((c) => c.theme === detectedTheme)) return null;
 
               const themeLabel = CONVICTION_THEME_LABEL[detectedTheme];
 
               const respond = async (belief: ConvictionBelief) => {
                 setConvictionResponded(true);
-                // 'no' → low confidence (user actively disbelieves, not uncertain)
-                // 'still-forming' / 'yes' → medium confidence
                 const confidence = belief === 'no' ? 'low' : 'medium';
                 await setConviction(detectedTheme, belief, confidence, undefined, 'catalyst-scanner');
               };
@@ -346,6 +776,16 @@ function SkillScreenInner({ id }: { id: SkillId }) {
             )}
           </ScrollView>
 
+          {/* Drag scrollbar */}
+          {messages.length > 0 && (
+            <ScrollThumb
+              scrollRef={scrollRef}
+              contentHeight={contentHeight}
+              viewportHeight={viewportHeight}
+              scrollY={scrollY}
+            />
+          )}
+
           {/* Scroll-to-bottom button */}
           {!isAtBottom && messages.length > 0 && (
             <TouchableOpacity
@@ -366,18 +806,18 @@ function SkillScreenInner({ id }: { id: SkillId }) {
           )}
         </View>
 
-        {/* Hide text input when a picker is active */}
-        {!hasOptions && (
+        {/* Hide input on stock researcher empty state (form handles input) and when option picker is active */}
+        {!hasOptions && !(id === 'stock-researcher' && messages.length === 0) && (
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
               value={input}
               onChangeText={setInput}
               placeholder={
-                id === 'portfolio-reviewer'        ? 'Describe your portfolio...' :
-                id === 'market-catalyst-scanner'   ? 'Ask about a market event...' :
-                id === 'etf-analyzer'              ? 'Name an ETF to analyze...' :
-                id === 'stock-researcher'           ? 'Name a stock or company...' :
+                id === 'portfolio-reviewer'      ? 'Describe your portfolio...' :
+                id === 'market-catalyst-scanner' ? 'Ask about a market event...' :
+                id === 'etf-analyzer'            ? 'Name an ETF to analyze...' :
+                id === 'stock-researcher'        ? 'Name a stock or company...' :
                 ''
               }
               placeholderTextColor={G2}
@@ -424,6 +864,27 @@ const styles = StyleSheet.create({
   messageListContent: { padding: 16, paddingBottom: 8, gap: 12 },
 
   emptyState: { paddingTop: 40, alignItems: 'center', gap: 10 },
+  tickerSearchWrapper: { width: '100%', marginTop: 16, gap: 12 },
+  startResearchBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: GOLD,
+    paddingHorizontal: 24,
+    paddingVertical: 13,
+    borderRadius: 24,
+  },
+  startResearchBtnText: { color: BG, fontSize: 15, fontWeight: '700' },
+  historyLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    alignSelf: 'center',
+    paddingVertical: 6,
+  },
+  historyLinkText: { color: G2, fontSize: 13 },
   vaultBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -504,8 +965,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendButtonDisabled: { backgroundColor: S1, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
-  clearButton: { paddingHorizontal: 4 },
-  clearButtonText: { color: G2, fontSize: 14 },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+    backgroundColor: BG,
+  },
+  backBtn:             { padding: 8 },
+  customHeaderTitle:   { flex: 1, color: W, fontSize: 17, fontFamily: SERIF_SEMI, textAlign: 'center' },
+  customHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerIconBtn:       { padding: 4 },
+  headerNewBtn:        { paddingHorizontal: 8, paddingVertical: 4 },
+  headerNewBtnText:    { color: G2, fontSize: 13, letterSpacing: 0.3 },
 
   toast: {
     position: 'absolute',
@@ -522,25 +994,6 @@ const styles = StyleSheet.create({
   },
   toastText: { color: G1, fontSize: 13, lineHeight: 19 },
 
-  saveSlideRow: {
-    alignItems: 'flex-end',
-    paddingHorizontal: 4,
-    paddingBottom: 4,
-    gap: 6,
-  },
-  saveSlidesBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    backgroundColor: S1,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: LINE,
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 20,
-  },
-  saveSlidesBtnDisabled: { opacity: 0.5 },
-  saveSlidesBtnText: { color: W, fontSize: 13, fontWeight: '600' },
   slidesSavedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -550,7 +1003,6 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   slidesSavedText: { color: '#10B981', fontSize: 13, fontWeight: '500' },
-  slideErrorText:  { color: '#F87171', fontSize: 12 },
 
   // ── Conviction prompt (Catalyst Scanner) ──────────────────────────────────
   convictionPromptCard: {
@@ -607,6 +1059,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 70,
     right: 16,
+    zIndex: 10,
     width: 44,
     height: 44,
     borderRadius: 22,

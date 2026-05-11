@@ -127,6 +127,7 @@ export default function SavedResearchScreen() {
               onPress={() => router.push(`/slides/${item.id}`)}
               activeOpacity={0.7}
             >
+              <View style={[s.colorStrip, { backgroundColor: accent }]} />
               <View style={[s.skillBadge, { backgroundColor: bg }]}>
                 <Text style={[s.skillBadgeText, { color: accent }]}>
                   {item.skillName}
@@ -198,6 +199,10 @@ const s = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: LINE,
     overflow: 'hidden',
+  },
+  colorStrip: {
+    height: 4,
+    width: '100%',
   },
   skillBadge: {
     paddingHorizontal: 14,

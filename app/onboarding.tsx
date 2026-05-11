@@ -29,7 +29,7 @@ import { useState } from 'react';
 
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { seedPlaybookOnFirstLogin } from '@/utils/seedPlaybookOnFirstLogin';
-import type { KnowledgeLevel, InvestmentStatus, PrimaryGoal, UserProfile } from '@/types';
+import type { KnowledgeLevel, InvestmentStatus, PrimaryGoal, InvestmentWorldview, UserProfile } from '@/types';
 
 import { BG, S1, S2, LINE, W, GOLD, G1, G2, SERIF, BODY } from '@/theme';
 
@@ -66,6 +66,17 @@ const STEPS = [
       { value: 'learn-strategies',  label: 'Learn specific strategies',   description: 'Go deep on ETFs, value investing, income strategies' },
     ],
   },
+  {
+    id: 'worldview',
+    question: 'What drives your investment thinking?',
+    subtitle: 'Optional — shapes the rules Nora suggests. You can set or change this any time.',
+    options: [
+      { value: 'long-term-growth', label: 'Long-term growth',     description: 'Compounding over decades; ignore short-term noise' },
+      { value: 'income-stability', label: 'Income & stability',   description: 'Dividends, cash flow, and capital preservation' },
+      { value: 'values-driven',    label: 'Values-driven',        description: 'ESG, sector ethics, or personal conviction filters' },
+      { value: 'no-preference',    label: 'No strong preference', description: "Opportunistic — I go where the evidence leads" },
+    ],
+  },
 ];
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -78,18 +89,22 @@ export default function OnboardingScreen() {
   const [showFork, setShowFork] = useState(false);
   const [saving,   setSaving]   = useState(false);
 
-  const current  = STEPS[step];
-  const selected = answers[current?.id ?? ''];
-  const isLast   = step === STEPS.length - 1;
+  const current       = STEPS[step];
+  const selected      = answers[current?.id ?? ''];
+  const isWorldview   = current?.id === 'worldview';
+  const isLast        = step === STEPS.length - 1;
   // Progress: steps fill 90% of bar; fork fills the remaining 10%
   const progress = showFork ? 1 : (step + 1) / (STEPS.length + 1);
 
   // ── Step progression ──────────────────────────────────────────────────────
 
   function handleContinue() {
-    if (!selected) return;
+    if (!selected && !isWorldview) return;
     if (!isLast) { setStep((s) => s + 1); return; }
-    // Last step answered → go to fork screen
+    setShowFork(true);
+  }
+
+  function handleSkipWorldview() {
     setShowFork(true);
   }
 
@@ -99,10 +114,11 @@ export default function OnboardingScreen() {
     setSaving(true);
 
     const profile: UserProfile = {
-      knowledgeLevel:     answers['knowledge'] as KnowledgeLevel,
-      investmentStatus:   answers['status']    as InvestmentStatus,
-      primaryGoal:        answers['goal']      as PrimaryGoal,
-      responseStyle:      'balanced',           // sensible default; refined in extended-profile
+      knowledgeLevel:     answers['knowledge']  as KnowledgeLevel,
+      investmentStatus:   answers['status']     as InvestmentStatus,
+      primaryGoal:        answers['goal']        as PrimaryGoal,
+      worldview:          answers['worldview']  as InvestmentWorldview | undefined,
+      responseStyle:      'balanced',
       onboardingComplete: true,
     };
 
@@ -213,15 +229,18 @@ export default function OnboardingScreen() {
 
       <View style={s.footer}>
         <TouchableOpacity
-          style={[s.nextBtn, !selected && s.nextBtnOff]}
+          style={[s.nextBtn, (!selected && !isWorldview) && s.nextBtnOff]}
           onPress={handleContinue}
-          disabled={!selected}
+          disabled={!selected && !isWorldview}
           activeOpacity={0.8}
         >
-          <Text style={[s.nextText, !selected && s.nextTextOff]}>
-            {isLast ? 'Continue' : 'Continue'}
-          </Text>
+          <Text style={[s.nextText, (!selected && !isWorldview) && s.nextTextOff]}>Continue</Text>
         </TouchableOpacity>
+        {isWorldview && (
+          <TouchableOpacity style={s.skipBtn} onPress={handleSkipWorldview} activeOpacity={0.6}>
+            <Text style={s.skipBtnText}>Skip for now</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -259,6 +278,9 @@ const s = StyleSheet.create({
   nextBtnOff:  { backgroundColor: S2 },
   nextText:    { color: BG, fontSize: 17, fontWeight: '700' },
   nextTextOff: { color: G2 },
+
+  skipBtn:     { alignItems: 'center', paddingVertical: 14 },
+  skipBtnText: { fontSize: 14, color: G2, fontFamily: BODY },
 
   // ── Fork screen ────────────────────────────────────────────────────────────
   forkWrap: {

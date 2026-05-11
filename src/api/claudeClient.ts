@@ -135,12 +135,24 @@ export async function loadFundManagerContext(): Promise<FundManagerContext> {
       ctx.recentAnalyses = `The user's recent saved analyses:\n${lines.join('\n')}`;
     }
 
-    // User profile (for portfolio reviewer personalisation)
+    // User profile + vault cash (stored on profiles, not vault_holdings)
     const { data: profileData } = await supabase
       .from('profiles')
-      .select('knowledge_level, investment_status, primary_goal, risk_tolerance, age_range, worldview, macro_convictions, worldview_note, response_style')
+      .select('knowledge_level, investment_status, primary_goal, risk_tolerance, age_range, worldview, macro_convictions, worldview_note, response_style, vault_cash, vault_base_currency')
       .eq('id', user.id)
       .single();
+
+    // Append cash position to vault summary if present
+    if (profileData?.vault_cash) {
+      const cashAmt = parseFloat(profileData.vault_cash.amount || '0');
+      if (cashAmt > 0) {
+        const currency = profileData.vault_cash.currency ?? profileData.vault_base_currency ?? 'USD';
+        const cashLine = `• Cash [cash] (${currency} ${cashAmt.toLocaleString('en-US')})`;
+        ctx.vaultSummary = ctx.vaultSummary
+          ? `${ctx.vaultSummary}\n${cashLine}`
+          : `The user's current vault holdings:\n${cashLine}`;
+      }
+    }
 
     if (profileData) {
       const profileLines = [
@@ -164,10 +176,15 @@ export async function loadFundManagerContext(): Promise<FundManagerContext> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-// All Claude API calls are proxied through a Supabase Edge Function.
-// The Anthropic API key lives only on the server — never in the mobile binary.
-const PROXY_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/dynamic-service`;
+// Streaming calls go through the Supabase proxy so heartbeats keep iOS connections
+// alive during Anthropic's silent web-search periods.
+// Non-streaming calls (callClaude, callClaudeRaw) hit Anthropic directly — they are
+// short-lived and have no timeout risk.
+const STREAM_PROXY_URL = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/dynamic-service`;
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
+const API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY ?? '';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 // max_uses: 8 caps web searches to one per research phase, keeping response
 // times predictable on mobile and preventing runaway multi-search loops.
@@ -177,20 +194,6 @@ const WEB_SEARCH_TOOL = {
   max_uses: 8,
 } as const;
 
-/**
- * Returns an Authorization header value using the current Supabase session token.
- * Falls back to the anon key if no session is present (guest / unauthenticated).
- */
-async function getAuthToken(): Promise<string> {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      return `Bearer ${session.access_token}`;
-    }
-  } catch { /* fall through */ }
-  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
-  return `Bearer ${anonKey}`;
-}
 
 // ─── System prompts ───────────────────────────────────────────────────────────
 
@@ -288,7 +291,7 @@ ${styleInstructions[style]}
 
 ## USER CONTEXT
 ${statusContext[status]}
-${goalContext[goal]}${risk      ? `\n${riskContext[risk]}`           : ''}${age       ? `\n${ageContext[age]}`             : ''}${worldview ? `\n${worldviewContext[worldview]}` : ''}${macroConvictions.length > 0 ? `\n\n## MACRO CONVICTIONS\nThe user holds these beliefs about how the world is changing: ${macroConvictions.join(', ')}${worldviewNote ? ` They elaborated: "${worldviewNote}"` : ''}\nThese are worldview beliefs, not instructions. Hold them as context. Where analysis naturally connects to one of these convictions, you may draw that link briefly - but do not lead with them, build every response around them, or use them to validate or oppose the user's views. Stay objective. Your job is to teach clearly and direct the user to sound thinking, not to reinforce a particular lens.` : ''}${ctx?.vaultSummary    ? `\n\n## VAULT HOLDINGS\n${ctx.vaultSummary}\nThe user's vault is their sandbox - they haven't necessarily made these investments yet. Reference it naturally when relevant, but don't lead every response with it.` : ''}${ctx?.recentAnalyses  ? `\n\n## RECENT ANALYSES\n${ctx.recentAnalyses}\nIf the user asks about a topic covered in a recent analysis, you can reference that they've already explored it and invite them to revisit it in the Archive tab.` : ''}
+${goalContext[goal]}${risk      ? `\n${riskContext[risk]}`           : ''}${age       ? `\n${ageContext[age]}`             : ''}${worldview ? `\n${worldviewContext[worldview]}` : ''}${macroConvictions.length > 0 ? `\n\n## MACRO CONVICTIONS\nThe user holds these beliefs about how the world is changing: ${macroConvictions.join(', ')}${worldviewNote ? ` They elaborated: "${worldviewNote}"` : ''}\nThese are worldview beliefs, not instructions. Hold them as context. Where analysis naturally connects to one of these convictions, you may draw that link briefly - but do not lead with them, build every response around them, or use them to validate or oppose the user's views. Stay objective. Your job is to teach clearly and direct the user to sound thinking, not to reinforce a particular lens.` : ''}${ctx?.vaultSummary    ? `\n\n## VAULT HOLDINGS\n${ctx.vaultSummary}\nThis represents the user's stated investment position. When they ask about their cash, portfolio, or holdings, treat this as their actual current position and answer directly from it — do not redirect them to check a brokerage or external account when the data is already here. Reference it naturally when relevant, but don't open every response by listing holdings unprompted.` : ''}${ctx?.recentAnalyses  ? `\n\n## RECENT ANALYSES\n${ctx.recentAnalyses}\nIf the user asks about a topic covered in a recent analysis, you can reference that they've already explored it and invite them to revisit it in the Archive tab.` : ''}
 
 ## YOUR ROLE
 - Teach using the frameworks in the knowledge base below (MACE, 8-phase analysis, archetypes, etc.)
@@ -396,8 +399,9 @@ function buildRequestBody(
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   };
 
-  if (useWebSearch) {
-    body.tools = [WEB_SEARCH_TOOL];
+  const effectiveMaxSearches = options.maxWebSearches ?? WEB_SEARCH_TOOL.max_uses;
+  if (useWebSearch && effectiveMaxSearches > 0) {
+    body.tools = [{ ...WEB_SEARCH_TOOL, max_uses: effectiveMaxSearches }];
   }
 
   return { body, model };
@@ -560,22 +564,16 @@ export function streamClaude(
     // silently cancelled — settled flag prevents double callbacks
   };
 
-  // Open XHR after resolving the auth token (async — avoids blocking the render)
-  getAuthToken().then((token) => {
-    if (abortedBeforeOpen) return;
+  // Route streaming through the heartbeat proxy so iOS stays connected during
+  // Anthropic's silent web-search periods.
+  if (!abortedBeforeOpen) {
     xhrStarted = true;
-    xhr.open('POST', PROXY_URL, true);
+    xhr.open('POST', STREAM_PROXY_URL, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
-    xhr.setRequestHeader('Authorization', token);
+    xhr.setRequestHeader('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
     xhr.setRequestHeader('anthropic-version', API_VERSION);
     xhr.send(JSON.stringify(body));
-  }).catch(() => {
-    if (!settled) {
-      settled = true;
-      cleanup();
-      callbacks.onError(new Error('Authentication error. Please sign in again.'));
-    }
-  });
+  }
 
   // Return abort function so callers (e.g. clearSession) can cancel in-flight requests
   return () => {
@@ -600,15 +598,13 @@ export async function callClaude(options: ClaudeRequestOptions): Promise<ClaudeR
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  const token = await getAuthToken();
-
   let response: Response;
   try {
-    response = await fetch(PROXY_URL, {
+    response = await fetch(ANTHROPIC_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': token,
+        'x-api-key': API_KEY,
         'anthropic-version': API_VERSION,
       },
       body: JSON.stringify(body),
@@ -658,17 +654,16 @@ export async function callClaudeRaw(
   timeoutMs = 60_000,
   model: string = MODELS.portfolioAnalysis,
 ): Promise<string> {
-  const token = await getAuthToken();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
   try {
-    response = await fetch(PROXY_URL, {
+    response = await fetch(ANTHROPIC_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': token,
+        'x-api-key': API_KEY,
         'anthropic-version': API_VERSION,
       },
       body: JSON.stringify({

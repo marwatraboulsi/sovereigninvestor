@@ -23,15 +23,17 @@ import { useGuest } from '@/contexts/GuestContext';
 import { useSpeechInput } from '@/hooks/useSpeechInput';
 import { useConversation, consumePendingConversation } from '@/hooks/useConversation';
 import { streamClaude, loadFundManagerContext, retrieveKnowledgeChunks } from '@/api/claudeClient';
+import { buildLearnModeContent } from '@/skills/learnMode';
+import { ScrollThumb } from '@/components/ScrollThumb';
 import type { Message, FundManagerContext } from '@/types';
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 
-import { BG, BG_DEEP, S1, S2, S_HIGH, S_HIGHEST, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, SERIF_BOLD, BODY, R, R_SM, R_LG, TAB_BAR_HEIGHT } from '@/theme';
+import { BG, BG_DEEP, S1, S2, S_HIGH, S_HIGHEST, LINE, W, GOLD, ON_PRIMARY, G1, G2, G3, SERIF, BODY, R, R_SM, R_LG, TAB_BAR_HEIGHT } from '@/theme';
 
 // ─── Content ──────────────────────────────────────────────────────────────────
 
-const STARTERS = [
+const CHAT_STARTERS = [
   'What is the stock market and how does it work?',
   "Explain ETFs to me like I'm a beginner",
   "What's the difference between growth and value investing?",
@@ -40,12 +42,21 @@ const STARTERS = [
   'Walk me through how to build a portfolio',
 ];
 
-const TOOLS = [
-  { icon: 'remove-outline' as const,      label: 'Simpler',       prompt: 'Can you explain that more simply?' },
-  { icon: 'arrow-forward-outline' as const,label: 'Example',      prompt: 'Give me a real-world example of that.' },
-  { icon: 'list-outline' as const,        label: 'Key points',    prompt: 'What are the key takeaways?' },
-  { icon: 'telescope-outline' as const,   label: 'Go deeper',     prompt: 'Can you go deeper on that topic?' },
-  { icon: 'help-circle-outline' as const, label: 'What do I do?', prompt: 'What should I practically consider doing with this?' },
+const LEARN_STARTERS = [
+  'Propose a learning curriculum tailored to my profile and goals',
+  'Help me understand Bitcoin before I decide anything',
+  'Explain index funds and why people love them',
+  'What should I know about gold as an investment?',
+  'Walk me through how bonds actually work',
+  'What are the real risks of investing in tech stocks?',
+];
+
+const LEARN_NEXT_CATEGORIES = [
+  { id: 'deeper',     label: 'Go deeper',               prompt: "Let's go deeper on what we just covered." },
+  { id: 'examples',  label: 'Real-world examples',      prompt: 'Give me a concrete real-world example of this.' },
+  { id: 'test',       label: 'Test my understanding',   prompt: 'Ask me a question to test my understanding so far.' },
+  { id: 'apply',      label: 'Apply to my situation',   prompt: 'How does this connect to my portfolio and investment goals specifically?' },
+  { id: 'curriculum', label: 'Propose a curriculum',    prompt: 'Based on what we\'ve covered and my profile, propose a tailored learning curriculum for me — milestones I can work through, adapted as I learn.' },
 ];
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -61,17 +72,27 @@ export default function ChatScreen() {
   const [isStreaming, setIsStreaming]       = useState(false);
   const [input, setInput]                   = useState('');
   const [error, setError]                   = useState<string | null>(null);
-  const [toolsOpen, setToolsOpen]           = useState(false);
+  const [modeMenuOpen, setModeMenuOpen]     = useState(false);
   const [fmContext, setFmContext]           = useState<FundManagerContext>({});
   const [showPrivacy, setShowPrivacy]       = useState(false);
   const [isAtBottom, setIsAtBottom]         = useState(true);
+  const [scrollY,        setScrollY]        = useState(0);
+  const [contentHeight,  setContentHeight]  = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
   const scrollRef                           = useRef<ScrollView>(null);
   const abortRef                            = useRef<(() => void) | null>(null);
 
-  // ── Intercept seed (4E) ────────────────────────────────────────────────────
-  // When the user taps "Talk it through" in the Intercept wizard, the chat tab
-  // receives a `seed` param and auto-sends it as the opening message.
-  const { seed } = useLocalSearchParams<{ seed?: string }>();
+  // ── Learn mode state ───────────────────────────────────────────────────────
+  const [chatMode,            setChatMode]            = useState<'chat' | 'learn'>('chat');
+  const [learnTopic,          setLearnTopic]          = useState('');
+  const [pendingLearnOpening, setPendingLearnOpening] = useState('');
+  const chatModeRef          = useRef<'chat' | 'learn'>('chat');
+  const learnSystemPromptRef = useRef('');
+  const lastLearnTopicRef    = useRef<string | undefined>(undefined);
+
+  // ── Intercept seed / deep-link params ─────────────────────────────────────
+  const { seed, mode: modeParam, learnTopic: learnTopicParam } =
+    useLocalSearchParams<{ seed?: string; mode?: string; learnTopic?: string }>();
   const lastSeedRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
@@ -85,7 +106,7 @@ export default function ChatScreen() {
     }).catch(() => setHistoryLoading(false));
   }, []);
 
-  // Auto-send seed message from Intercept "Talk it through" (4E)
+  // Auto-send seed message from Intercept "Talk it through"
   useEffect(() => {
     if (!seed || seed === lastSeedRef.current) return;
     if (historyLoading || isStreaming) return;
@@ -93,6 +114,24 @@ export default function ChatScreen() {
     send(seed);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seed, historyLoading]);
+
+  // Activate Learn mode when learnTopic param arrives (from intercept or /learn redirect)
+  useEffect(() => {
+    if (!learnTopicParam || learnTopicParam === lastLearnTopicRef.current) return;
+    if (historyLoading) return;
+    lastLearnTopicRef.current = learnTopicParam;
+    activateLearnMode(learnTopicParam);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [learnTopicParam, historyLoading]);
+
+  // Send pending learn opening message once state has settled
+  useEffect(() => {
+    if (!pendingLearnOpening || isStreaming) return;
+    const msg = pendingLearnOpening;
+    setPendingLearnOpening('');
+    send(msg);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingLearnOpening, isStreaming]);
 
   // Pick up conversation switches from the browser
   // Show orientation once on first open
@@ -136,14 +175,45 @@ export default function ChatScreen() {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages, streamingText]);
 
+  function activateLearnMode(topic: string) {
+    const { systemPrompt, openingMessage } = buildLearnModeContent(
+      topic,
+      profile ?? null,
+      fmContext.vaultSummary,
+    );
+    learnSystemPromptRef.current = systemPrompt;
+    chatModeRef.current = 'learn';
+    setLearnTopic(topic);
+    setChatMode('learn');
+    setError(null);
+    setModeMenuOpen(false);
+    // Only send opening message for fresh sessions with a specific topic
+    if (messages.length === 0 && topic) {
+      setPendingLearnOpening(openingMessage);
+    }
+  }
+
+  function switchToChat() {
+    abortRef.current?.();
+    chatModeRef.current = 'chat';
+    learnSystemPromptRef.current = '';
+    setChatMode('chat');
+    setLearnTopic('');
+    setStreaming('');
+    setIsStreaming(false);
+    setError(null);
+    setModeMenuOpen(false);
+  }
+
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || isStreaming) return;
     setInput('');
     setError(null);
     setStreaming('');
-    setToolsOpen(false);
+    setModeMenuOpen(false);
 
+    const isLearn = chatModeRef.current === 'learn';
     const userMsg: Message = { role: 'user', content: trimmed };
     const next = [...messages, userMsg];
     setMessages(next);
@@ -152,29 +222,40 @@ export default function ChatScreen() {
     // Persist user message immediately (skip for guests)
     if (!isGuest) saveMessage(userMsg);
 
-    // Retrieve relevant knowledge chunks before streaming (falls back silently)
-    const chunks = await retrieveKnowledgeChunks(trimmed);
-    const enrichedContext = chunks ? { ...fmContext, knowledgeChunks: chunks } : fmContext;
+    // RAG enrichment only in chat mode
+    let enrichedContext = fmContext;
+    if (!isLearn) {
+      const chunks = await retrieveKnowledgeChunks(trimmed);
+      if (chunks) enrichedContext = { ...fmContext, knowledgeChunks: chunks };
+    }
 
-    // Trim history sent to Claude to last 100 messages (full history stays in UI + Supabase)
+    // Trim history sent to Claude to last 100 messages
     const CLAUDE_MSG_LIMIT = 100;
     const messagesForClaude = next.length > CLAUDE_MSG_LIMIT
       ? next.slice(next.length - CLAUDE_MSG_LIMIT)
       : next;
 
     abortRef.current = streamClaude(
-      { messages: messagesForClaude, userProfile: profile ?? undefined, fundManagerContext: enrichedContext },
       {
-        onChunk:  (c) => setStreaming((p) => p + c),
-        onDone:   (content, suggestions) => {
+        messages:             messagesForClaude,
+        userProfile:          isLearn ? undefined : (profile ?? undefined),
+        fundManagerContext:   isLearn ? {} : enrichedContext,
+        systemPromptOverride: isLearn ? learnSystemPromptRef.current : undefined,
+      },
+      {
+        onChunk: (c) => setStreaming((p) => p + c),
+        onDone:  (content, suggestions) => {
           setStreaming('');
           setIsStreaming(false);
-          const assistantMsg: Message = { role: 'assistant', content, suggestions };
+          const assistantMsg: Message = {
+            role: 'assistant',
+            content,
+            suggestions: isLearn ? [] : suggestions,
+          };
           setMessages((p) => [...p, assistantMsg]);
-          // Persist assistant message (skip for guests)
           if (!isGuest) saveMessage(assistantMsg);
         },
-        onError:  (err) => {
+        onError: (err) => {
           setStreaming('');
           setIsStreaming(false);
           setError(err.message);
@@ -189,11 +270,15 @@ export default function ChatScreen() {
     setStreaming('');
     setIsStreaming(false);
     setError(null);
-    setToolsOpen(false);
+    setModeMenuOpen(false);
+    chatModeRef.current = 'chat';
+    learnSystemPromptRef.current = '';
+    setChatMode('chat');
+    setLearnTopic('');
     if (!isGuest) startNewConversation();
   };
 
-  const isEmpty     = messages.length === 0 && !isStreaming;
+  const isEmpty     = messages.length === 0 && !isStreaming && !pendingLearnOpening;
   const hasMessages = messages.length > 0 || isStreaming;
 
   const dismissPrivacy = () => {
@@ -234,14 +319,16 @@ export default function ChatScreen() {
       <View style={s.header}>
         <View style={s.headerRow}>
           <View style={s.headerLeft}>
-            <Text style={s.headerEyebrow}>Counsel</Text>
+            <Text style={s.headerEyebrow}>
+              {chatMode === 'learn' ? 'Learning' : 'Counsel'}
+            </Text>
             <Text style={s.headerTitle}>Nora.</Text>
           </View>
           <View style={s.headerActions}>
             <TouchableOpacity onPress={() => router.push({ pathname: '/how-it-works', params: { tab: 'chat' } })} activeOpacity={0.6} style={s.headerIconBtn}>
               <Text style={s.headerInfoText}>?</Text>
             </TouchableOpacity>
-            {!isGuest && (
+            {!isGuest && chatMode === 'chat' && (
               <TouchableOpacity onPress={() => router.push('/conversations')} activeOpacity={0.6} style={s.headerIconBtn}>
                 <Ionicons name="time-outline" size={18} color={G2} />
               </TouchableOpacity>
@@ -253,7 +340,19 @@ export default function ChatScreen() {
             )}
           </View>
         </View>
-        <Text style={s.headerSub}>A thinking partner, not an oracle. She knows what you said you would do.</Text>
+        {chatMode === 'learn' && learnTopic ? (
+          <View style={s.learnBadgeRow}>
+            <View style={s.learnBadge}>
+              <Ionicons name="school-outline" size={11} color={GOLD} />
+              <Text style={s.learnBadgeText}>{learnTopic}</Text>
+            </View>
+            <TouchableOpacity onPress={switchToChat} activeOpacity={0.6} style={s.learnExitBtn}>
+              <Text style={s.learnExitText}>Exit</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text style={s.headerSub}>A thinking partner, not an oracle. She helps you think clearly and holds you to your own investment rules.</Text>
+        )}
       </View>
 
       <KeyboardAvoidingView
@@ -267,11 +366,14 @@ export default function ChatScreen() {
           contentContainerStyle={[s.scrollContent, isEmpty && s.scrollEmpty]}
           showsVerticalScrollIndicator={false}
           keyboardDismissMode="on-drag"
-          onScrollBeginDrag={() => setToolsOpen(false)}
+          onScrollBeginDrag={() => setModeMenuOpen(false)}
           onScroll={(event) => {
             const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
             const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
             setIsAtBottom(distanceFromBottom < 40);
+            setScrollY(contentOffset.y);
+            setContentHeight(contentSize.height);
+            setViewportHeight(layoutMeasurement.height);
           }}
           scrollEventThrottle={16}
         >
@@ -280,17 +382,23 @@ export default function ChatScreen() {
               <ActivityIndicator color={G1} size="small" />
             </View>
           ) : isEmpty ? (
-            <EmptyState onSelect={send} />
+            <EmptyState mode={chatMode} onSelect={send} />
           ) : (
             <>
-              {messages.map((msg, i) => (
-                <Bubble
-                  key={i}
-                  msg={msg}
-                  isLast={i === messages.length - 1 && !isStreaming}
-                  onSuggest={send}
-                />
-              ))}
+              {messages.map((msg, i) => {
+                const isLastMsg = i === messages.length - 1;
+                const showLearnNext = isLastMsg && msg.role === 'assistant' && !isStreaming && chatMode === 'learn';
+                return (
+                  <View key={i}>
+                    <Bubble
+                      msg={msg}
+                      isLast={isLastMsg && !isStreaming}
+                      onSuggest={send}
+                    />
+                    {showLearnNext && <LearnNextCard onSelect={send} />}
+                  </View>
+                );
+              })}
               {isStreaming && <StreamBubble text={streamingText} />}
             </>
           )}
@@ -304,6 +412,13 @@ export default function ChatScreen() {
             </View>
           )}
         </ScrollView>
+
+        <ScrollThumb
+          scrollRef={scrollRef}
+          contentHeight={contentHeight}
+          viewportHeight={viewportHeight}
+          scrollY={scrollY}
+        />
 
         {/* Scroll-to-bottom button */}
         {!isAtBottom && messages.length > 0 && (
@@ -326,19 +441,26 @@ export default function ChatScreen() {
 
         {/* Input area */}
         <View style={[s.inputArea, { paddingBottom: TAB_BAR_HEIGHT - insets.bottom + 8 }]}>
-          {/* Tools menu */}
-          {toolsOpen && hasMessages && !isStreaming && (
-            <View style={s.toolsMenu}>
-              {TOOLS.map((t, i) => (
-                <TouchableOpacity
-                  key={t.label}
-                  style={[s.toolItem, i < TOOLS.length - 1 && s.toolItemBorder]}
-                  onPress={() => send(t.prompt)}
-                  activeOpacity={0.6}
-                >
-                  <Text style={s.toolLabel}>{t.label}</Text>
-                </TouchableOpacity>
-              ))}
+          {/* Mode menu popup */}
+          {modeMenuOpen && (
+            <View style={s.modeMenu}>
+              <TouchableOpacity
+                style={[s.modeMenuItem, chatMode === 'chat' && s.modeMenuItemActive]}
+                onPress={() => { switchToChat(); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.modeMenuLabel, chatMode === 'chat' && s.modeMenuLabelActive]}>Chat</Text>
+                <Text style={s.modeMenuDesc}>Open-ended conversation with Nora</Text>
+              </TouchableOpacity>
+              <View style={s.modeMenuDivider} />
+              <TouchableOpacity
+                style={[s.modeMenuItem, chatMode === 'learn' && s.modeMenuItemActive]}
+                onPress={() => { activateLearnMode(learnTopic || ''); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.modeMenuLabel, chatMode === 'learn' && s.modeMenuLabelActive]}>Learn</Text>
+                <Text style={s.modeMenuDesc}>Guided learning with follow-ups and curriculum</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -350,27 +472,27 @@ export default function ChatScreen() {
               style={s.inputField}
               value={input}
               onChangeText={setInput}
-              placeholder="Ask anything about investing…"
+              placeholder={chatMode === 'learn' ? 'Ask Nora anything about this topic…' : 'Ask anything about investing…'}
               placeholderTextColor={G2}
               multiline
               maxLength={2000}
               returnKeyType="send"
               onSubmitEditing={() => send(input)}
               blurOnSubmit={false}
-              onFocus={() => setToolsOpen(false)}
+              onFocus={() => setModeMenuOpen(false)}
             />
             <View style={s.toolbar}>
               <View style={s.toolbarLeft}>
-                {hasMessages && !isStreaming && (
-                  <TouchableOpacity
-                    style={s.toolsBtn}
-                    onPress={() => setToolsOpen((o) => !o)}
-                    activeOpacity={0.6}
-                  >
-                    <Ionicons name="flash-outline" size={14} color={toolsOpen ? W : G1} />
-                    <Text style={[s.toolsBtnText, toolsOpen && { color: W }]}>Tools</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={[s.modePill, modeMenuOpen && s.modePillOpen]}
+                  onPress={() => setModeMenuOpen((o) => !o)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="compass-outline" size={13} color={modeMenuOpen ? W : G1} />
+                  <Text style={[s.modePillText, modeMenuOpen && { color: W }]}>
+                    {chatMode === 'learn' ? 'Learn Mode' : 'Chat Mode'}
+                  </Text>
+                </TouchableOpacity>
               </View>
               <View style={s.toolbarRight}>
                 <TouchableOpacity
@@ -402,14 +524,15 @@ export default function ChatScreen() {
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-function EmptyState({ onSelect }: { onSelect: (t: string) => void }) {
+function EmptyState({ mode, onSelect }: { mode: 'chat' | 'learn'; onSelect: (t: string) => void }) {
+  const starters = mode === 'learn' ? LEARN_STARTERS : CHAT_STARTERS;
   return (
     <View style={s.empty}>
       <View style={s.starters}>
-        {STARTERS.map((q, i) => (
+        {starters.map((q, i) => (
           <TouchableOpacity
             key={q}
-            style={[s.starter, i < STARTERS.length - 1 && s.starterBorder]}
+            style={[s.starter, i < starters.length - 1 && s.starterBorder]}
             onPress={() => onSelect(q)}
             activeOpacity={0.5}
           >
@@ -418,6 +541,27 @@ function EmptyState({ onSelect }: { onSelect: (t: string) => void }) {
           </TouchableOpacity>
         ))}
       </View>
+    </View>
+  );
+}
+
+// ─── Learn next card ──────────────────────────────────────────────────────────
+
+function LearnNextCard({ onSelect }: { onSelect: (t: string) => void }) {
+  return (
+    <View style={s.learnNextCard}>
+      <Text style={s.learnNextTitle}>What to explore next</Text>
+      {LEARN_NEXT_CATEGORIES.map((cat, i) => (
+        <TouchableOpacity
+          key={cat.id}
+          style={[s.learnNextItem, i < LEARN_NEXT_CATEGORIES.length - 1 && s.learnNextItemBorder]}
+          onPress={() => onSelect(cat.prompt)}
+          activeOpacity={0.6}
+        >
+          <Text style={s.learnNextLabel}>{cat.label}</Text>
+          <Ionicons name="chevron-forward" size={13} color={G2} />
+        </TouchableOpacity>
+      ))}
     </View>
   );
 }
@@ -619,14 +763,18 @@ const s = StyleSheet.create({
   },
   disclaimer: { textAlign: 'center', fontSize: 10, color: G3, fontFamily: SERIF, fontStyle: 'italic' },
 
-  // Tools menu
-  toolsMenu: {
+  // Mode menu popup
+  modeMenu: {
     backgroundColor: S1, borderRadius: R,
     overflow: 'hidden', marginBottom: 4,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: LINE,
   },
-  toolItem:       { paddingHorizontal: 18, paddingVertical: 14 },
-  toolItemBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
-  toolLabel:      { color: G1, fontSize: 14, fontFamily: BODY },
+  modeMenuItem:       { paddingHorizontal: 18, paddingVertical: 14, gap: 3 },
+  modeMenuItemActive: { backgroundColor: S2 },
+  modeMenuLabel:      { color: G1, fontSize: 14, fontFamily: BODY, fontWeight: '500' },
+  modeMenuLabelActive:{ color: W },
+  modeMenuDesc:       { color: G2, fontSize: 12, fontFamily: BODY },
+  modeMenuDivider:    { height: StyleSheet.hairlineWidth, backgroundColor: LINE },
 
   // Input card — sharp, tonal
   inputCard: {
@@ -650,11 +798,13 @@ const s = StyleSheet.create({
   toolbarLeft:  { flexDirection: 'row', alignItems: 'center' },
   toolbarRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 
-  toolsBtn: {
+  // Mode pill button (in toolbar)
+  modePill: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 10, paddingVertical: 7, borderRadius: R_SM,
   },
-  toolsBtnText: { color: G2, fontSize: 12, fontFamily: BODY },
+  modePillOpen: { backgroundColor: S2 },
+  modePillText: { color: G2, fontSize: 12, fontFamily: BODY },
 
   micBtn: {
     width: 34, height: 34, borderRadius: R_SM,
@@ -687,6 +837,7 @@ const s = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 4,
+    zIndex: 10,
   },
 
   privacyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
@@ -708,6 +859,39 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   privacyBtnText: { color: ON_PRIMARY, fontSize: 15, fontWeight: '700', fontFamily: SERIF },
+
+  // ── Learn mode header badge ───────────────────────────────────────────────
+  learnBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
+  learnBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: S1, borderRadius: R_SM,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: GOLD,
+  },
+  learnBadgeText: { fontSize: 12, color: GOLD, fontFamily: SERIF, fontStyle: 'italic' },
+  learnExitBtn:   { paddingHorizontal: 8, paddingVertical: 4 },
+  learnExitText:  { fontSize: 12, color: G2, fontFamily: BODY, textDecorationLine: 'underline' },
+
+  // ── Learn next card ───────────────────────────────────────────────────────
+  learnNextCard: {
+    backgroundColor: S1,
+    borderRadius: R,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LINE,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  learnNextTitle: {
+    fontSize: 11, fontWeight: '600', color: GOLD, letterSpacing: 0.8,
+    textTransform: 'uppercase', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
+    fontFamily: BODY,
+  },
+  learnNextItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 13,
+  },
+  learnNextItemBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: LINE },
+  learnNextLabel: { color: G1, fontSize: 14, fontFamily: BODY },
 });
 
 const md = StyleSheet.create({

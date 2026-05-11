@@ -5,7 +5,7 @@ import { GOLD, G1, S1, LINE } from '@/theme';
 
 // Expected analysis durations in milliseconds (used for progress estimation)
 const EXPECTED_DURATIONS: Record<SkillId, number> = {
-  'stock-researcher':        90_000,
+  'stock-researcher':        280_000, // 8 phases: 6 × ~30s + phases 4 & 7 × ~45s + phase 8 ~20s
   'etf-analyzer':            40_000,
   'portfolio-reviewer':      35_000,
   'market-catalyst-scanner': 50_000,
@@ -49,6 +49,8 @@ interface Props {
   skillId: SkillId;
   streamingText: string;
   elapsedMs: number;
+  /** Explicit phase label (from phased stock analysis). Overrides all other detection. */
+  phaseLabel?: string | null;
 }
 
 /**
@@ -56,18 +58,19 @@ interface Props {
  * Claude is streaming a skill analysis.
  *
  * Phase label priority:
- *  1. A heading detected in the streaming text (`## ` or `**Phase`)
- *  2. A time-based label derived from elapsed % against expected duration
+ *  1. Explicit phaseLabel prop (from phased stock-researcher orchestration)
+ *  2. A heading detected in the streaming text (`## ` or `**Phase`)
+ *  3. A time-based label derived from elapsed % against expected duration
  */
-export function SkillProgress({ skillId, streamingText, elapsedMs }: Props) {
+export function SkillProgress({ skillId, streamingText, elapsedMs, phaseLabel: explicitPhaseLabel }: Props) {
   const expectedDuration = EXPECTED_DURATIONS[skillId];
   const rawPercent = (elapsedMs / expectedDuration) * 100;
   const percent = Math.min(95, rawPercent);
 
-  // Phase label: streaming text wins; fall back to time-based
+  // Phase label priority: explicit → streaming text heading → time-based
   const streamPhase = detectPhaseFromText(streamingText);
   const timePhase   = detectPhaseFromTime(skillId, percent);
-  const phaseLabel  = streamPhase ?? timePhase;
+  const phaseLabel  = explicitPhaseLabel ?? streamPhase ?? timePhase;
 
   // Animated progress bar width
   const animWidth = useRef(new Animated.Value(0)).current;

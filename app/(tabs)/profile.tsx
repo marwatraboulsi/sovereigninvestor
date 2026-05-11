@@ -8,7 +8,7 @@ import { usePlaybook } from '@/hooks/usePlaybook';
 import { useConvictions } from '@/hooks/useConvictions';
 import { supabase } from '@/lib/supabase';
 import type { MacroConviction, PlaybookRule, RuleCategory, Conviction, ConvictionBelief, ConvictionConfidence } from '@/types';
-import { seedPlaybookOnFirstLogin } from '@/utils/seedPlaybookOnFirstLogin';
+import { seedPlaybookOnFirstLogin, reseedPlaybook } from '@/utils/seedPlaybookOnFirstLogin';
 import { CONVICTION_THEME_LABEL } from '@/utils/convictionUtils';
 import { RuleWizard } from '@/components/RuleWizard';
 import { RuleCard } from '@/components/RuleCard';
@@ -221,14 +221,34 @@ export default function ProfileScreen() {
       await updateRule(editingRule.id, partial);
     } else {
       await addRule({
-        category:     partial.category!,
-        title:        partial.title!,
-        body:         partial.body!,
-        status:       partial.status ?? 'active',
+        category:      partial.category!,
+        title:         partial.title!,
+        body:          partial.body!,
+        status:        partial.status ?? 'active',
         sourceTrigger: 'manual',
+        decisionTypes: partial.decisionTypes ?? ['buy', 'sell', 'unsure'],
+        triggerTags:   partial.triggerTags ?? [],
       });
     }
     reloadRules();
+  }
+
+  async function handleReseedRules() {
+    if (!profile) return;
+    Alert.alert(
+      'Refresh seed rules',
+      'This will regenerate your onboarding-seed rules based on your current profile and convictions. Rules you added manually are preserved.',
+      [
+        {
+          text: 'Refresh',
+          onPress: async () => {
+            await reseedPlaybook(profile);
+            reloadRules();
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
   }
 
   // Group active + paused rules by category (removed rules filtered by hook)
@@ -589,68 +609,32 @@ export default function ProfileScreen() {
           <Text style={s.decisionLogChevron}>›</Text>
         </TouchableOpacity>
 
-        {/* ── 3. Convictions & Worldview ───────────────────────────────────── */}
+        {/* ── 3. Worldview ─────────────────────────────────────────────────── */}
         <View style={s.section}>
-          <Text style={s.sectionLabel}>Convictions & Worldview</Text>
+          <Text style={s.sectionLabel}>Worldview</Text>
           <Text style={s.sectionSub}>
-            Your beliefs about the world — built through Research, the Intercept, and your own thinking. Nora holds these as background context.
+            Your beliefs about the world. Nora holds these as background context.
           </Text>
 
-          {/* Conviction records (from Research / Intercept) */}
-          {convictionsLoaded && convictionRecords.length > 0 && (
-            <View style={s.playbookGroup}>
-              <Text style={s.playbookGroupLabel}>From Research & Intercept</Text>
-              {(['yes', 'still-forming', 'no'] as ConvictionBelief[]).map((belief) => {
-                const group = convictionRecords.filter((c) => c.belief === belief);
-                if (group.length === 0) return null;
-                return group.map((c) => (
-                  <TouchableOpacity
-                    key={c.id}
-                    style={s.convRecordCard}
-                    onPress={() => handleConvictionTap(c)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={s.convRecordTop}>
-                      <View style={[s.beliefDot, belief === 'yes' ? s.beliefDotGreen : belief === 'no' ? s.beliefDotRed : s.beliefDotAmber]} />
-                      <Text style={s.convRecordLabel} numberOfLines={1}>
-                        {CONVICTION_THEME_LABEL[c.theme]}
-                      </Text>
-                      <View style={[s.confBadge, c.confidence === 'high' ? s.confBadgeHigh : c.confidence === 'low' ? s.confBadgeLow : s.confBadgeMed]}>
-                        <Text style={s.confBadgeText}>{c.confidence}</Text>
-                      </View>
-                      <Ionicons name="chevron-forward" size={14} color={G2} />
-                    </View>
-                    {c.note ? (
-                      <Text style={s.convRecordNote} numberOfLines={2}>{c.note}</Text>
-                    ) : null}
-                  </TouchableOpacity>
-                ));
-              })}
-            </View>
-          )}
-
-          {/* Macro theses — background worldview */}
-          <View style={s.playbookGroup}>
-            <Text style={s.playbookGroupLabel}>Background Theses</Text>
-            <View style={s.convictionGrid}>
-              {MACRO_CONVICTIONS.map((c) => {
-                const active = convictions.includes(c.id);
-                return (
-                  <TouchableOpacity
-                    key={c.id}
-                    style={[s.convictionCard, active && s.convictionCardActive]}
-                    onPress={() => toggleConviction(c.id)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={s.convictionHeader}>
-                      <Text style={[s.convictionLabel, active && s.convictionLabelActive]}>{c.label}</Text>
-                      {active && <View style={s.convictionDot} />}
-                    </View>
-                    <Text style={s.convictionDesc}>{c.description}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+          {/* Macro conviction cards */}
+          <View style={s.convictionGrid}>
+            {MACRO_CONVICTIONS.map((c) => {
+              const active = convictions.includes(c.id);
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  style={[s.convictionCard, active && s.convictionCardActive]}
+                  onPress={() => toggleConviction(c.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={s.convictionHeader}>
+                    <Text style={[s.convictionLabel, active && s.convictionLabelActive]}>{c.label}</Text>
+                    {active && <View style={s.convictionDot} />}
+                  </View>
+                  <Text style={s.convictionDesc}>{c.description}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           {/* Free-text note */}
@@ -805,6 +789,17 @@ const s = StyleSheet.create({
   convictionLabelActive: { color: GOLD },
   convictionDot:    { width: 7, height: 7, borderRadius: 4, backgroundColor: GOLD },
   convictionDesc:   { fontSize: 13, color: G2, lineHeight: 19, fontFamily: BODY },
+
+  // Reseed rules button
+  reseedBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 7,
+    alignSelf: 'flex-start',
+    paddingVertical: 8, paddingHorizontal: 12,
+    borderRadius: R_SM,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: LINE,
+    marginTop: 4,
+  },
+  reseedBtnText: { fontSize: 12, color: G2, fontFamily: BODY },
 
   // Free-text note
   noteWrap:  { gap: 8, marginTop: 4 },

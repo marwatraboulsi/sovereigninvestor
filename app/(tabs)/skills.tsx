@@ -8,6 +8,13 @@ import { AccountModal } from '@/components/AccountModal';
 
 import { BG, S1, LINE, W, G1, G2, G3, GOLD, ON_PRIMARY, R, R_SM, TAB_BAR_HEIGHT, SERIF, SERIF_BOLD, SERIF_SEMI, BODY } from '@/theme';
 
+const SKILL_ACCENT: Record<string, string> = {
+  'portfolio-reviewer':      '#3B82F6',
+  'market-catalyst-scanner': '#10B981',
+  'etf-analyzer':            '#8B5CF6',
+  'stock-researcher':        '#F59E0B',
+};
+
 const SKILLS = [
   {
     id: 'portfolio-reviewer',
@@ -72,12 +79,15 @@ export default function SkillsScreen() {
               onPress={() => isGuest ? setShowModal(true) : router.push(`/skill/${skill.id}`)}
               activeOpacity={0.5}
             >
-              <View style={s.itemBody}>
-                <Text style={s.itemTitle}>{skill.title}</Text>
-                <Text style={s.itemDesc}>{skill.description}</Text>
-                <Text style={s.itemDetail}>{skill.detail}</Text>
+              <View style={[s.colorStrip, { backgroundColor: SKILL_ACCENT[skill.id] }]} />
+              <View style={s.itemRow}>
+                <View style={s.itemBody}>
+                  <Text style={s.itemTitle}>{skill.title}</Text>
+                  <Text style={s.itemDesc}>{skill.description}</Text>
+                  <Text style={s.itemDetail}>{skill.detail}</Text>
+                </View>
+                <Ionicons name={isGuest ? 'lock-closed-outline' : 'chevron-forward'} size={16} color={G2} />
               </View>
-              <Ionicons name={isGuest ? 'lock-closed-outline' : 'chevron-forward'} size={16} color={G2} />
             </TouchableOpacity>
           ))}
         </View>
@@ -119,16 +129,23 @@ const s = StyleSheet.create({
     gap: 2,
   },
   item: {
+    backgroundColor: S1,
+    borderRadius: R,
+    overflow: 'hidden',
+  },
+  colorStrip: {
+    height: 4,
+    width: '100%',
+  },
+  itemBorder: {},
+  itemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 20,
     paddingHorizontal: 16,
     gap: 16,
-    backgroundColor: S1,
-    borderRadius: R,
   },
-  itemBorder: {},
-  itemBody:   { flex: 1, gap: 6 },
+  itemBody: { flex: 1, gap: 6 },
   itemTitle:  { fontSize: 16, fontFamily: SERIF_SEMI, color: W },
   itemDesc:   { fontSize: 13, color: G1, lineHeight: 20, fontFamily: BODY },
   itemDetail: { fontSize: 11, color: GOLD, fontFamily: BODY, textTransform: 'uppercase', letterSpacing: 0.5 },

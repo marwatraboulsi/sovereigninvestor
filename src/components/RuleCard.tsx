@@ -55,6 +55,45 @@ const SOURCE_LABEL: Record<RuleSourceTrigger, string> = {
   'learn-mode':      'Created after a Learn session',
 };
 
+const SEED_RULE_REASON: Record<string, string> = {
+  // Universal
+  'Recency Bias':                   'Added for all investors — recent price movement is one of the most reliably misleading signals.',
+  'Social Comparison / FOMO':       'Added for all investors — comparing returns with others is a leading cause of mistimed decisions.',
+  'The Pause Rule':                 'Added for all investors — urgency in investing is almost always manufactured, not real.',
+  'News Reaction':                  'Added for all investors — by the time a headline is public, markets have already priced it.',
+  // Risk tolerance
+  'Concentration Limit':            'Added because you identified as a conservative investor — concentration amplifies losses in ways that cut against capital preservation.',
+  'Conviction vs Overconfidence':   'Added because you identified as an aggressive investor — high conviction and overconfidence feel identical in the moment.',
+  'Entry Criteria Check':           'Added because you identified as an aggressive investor — defined criteria prevent emotional entries.',
+  'Exit Plan First':                'Added because you identified as an aggressive investor — entering without an exit condition is not a strategy.',
+  // Investment status
+  'Price-Checking Frequency':       'Added because you are currently investing — frequent price checks increase anxiety and the urge to act on noise.',
+  // Primary goal
+  'Core vs Satellite Allocation':   'Added because your goal is to build and grow a portfolio — blurring core and satellite positions erodes structure.',
+  // Knowledge level
+  'Research Before You React':      'Added because you are building your investing knowledge — excitement about an idea is not the same as understanding it.',
+  // Age
+  'Long Horizon Discipline':        'Added because at your stage, time is your most valuable asset — volatility only matters if you sell into it.',
+  'Transition Awareness':           'Added because you are approaching an important financial life transition — growth that introduces unaffordable risk is not growth.',
+  'Capital Preservation Gate':      'Added because at your stage, protecting what you have built matters as much as growing it.',
+  // Worldview
+  'Time Horizon Test':              'Added because you identified as a long-term growth investor — short-term moves inside a long-term portfolio are usually noise.',
+  'Yield Test':                     'Added because you identified as an income and stability investor — price appreciation without yield is only half the picture.',
+  'Values Alignment':               'Added because you identified as a values-driven investor — returns you are not comfortable with are not returns at all.',
+  // Conviction rules
+  'Dollar Debasement Consistency':  'Added because of your conviction that the dollar loses purchasing power over time.',
+  'US Decline Consistency':         'Added because of your conviction that US economic dominance is structurally declining.',
+  'AI Conviction Consistency':      'Added because of your conviction that AI is a defining force of this decade.',
+  'Climate Transition Consistency': 'Added because of your conviction that the energy transition is a generational shift.',
+  'Deglobalization Consistency':    'Added because of your conviction that global supply chains are structurally shifting.',
+  'Inflation Consistency':          'Added because of your conviction that inflation is structurally elevated.',
+  'Crypto Conviction Consistency':  'Added because of your conviction in the long-term role of crypto.',
+  'Hard Assets Consistency':        'Added because of your conviction that hard assets preserve real value.',
+  'Emerging Markets Consistency':   'Added because of your conviction in the long-term growth potential of emerging markets.',
+  'Debt Reckoning Consistency':     'Added because of your conviction that a sovereign debt reckoning is coming.',
+  'Tech Supremacy Consistency':     'Added because of your conviction that technology companies will continue to dominate value creation.',
+};
+
 function formatDate(ts: number): string {
   return new Date(ts).toLocaleDateString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric',
@@ -138,10 +177,14 @@ export function RuleCard({ rule, expanded: controlledExpanded, onPress, onLongPr
 
             <View style={s.metaRow}>
               <Text style={s.metaLabel}>Origin</Text>
-              <Text style={s.metaValue}>
-                {sourceLabel}
-                <Text style={s.metaDate}> · {dateLabel}</Text>
-              </Text>
+              <View style={s.metaValueCol}>
+                <Text style={s.metaValue}>
+                  {rule.sourceTrigger === 'onboarding-seed' && SEED_RULE_REASON[rule.title]
+                    ? SEED_RULE_REASON[rule.title]
+                    : sourceLabel}
+                  <Text style={s.metaDate}> · {dateLabel}</Text>
+                </Text>
+              </View>
             </View>
 
             <View style={s.metaDivider} />
@@ -262,6 +305,9 @@ const s = StyleSheet.create({
   },
   metaRow: {
     gap: 3,
+  },
+  metaValueCol: {
+    flex: 1,
   },
   metaLabel: {
     fontSize: 9,
