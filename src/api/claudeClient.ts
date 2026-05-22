@@ -21,6 +21,7 @@ import { MODELS } from '@/api/modelRouter';
 import { KNOWLEDGE_BASE } from '@/knowledge/knowledgeBase';
 import type { UserProfile } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { parseCashAmount } from '@/utils/parseCurrency';
 
 // ─── RAG: retrieve relevant knowledge chunks ──────────────────────────────────
 
@@ -144,7 +145,7 @@ export async function loadFundManagerContext(): Promise<FundManagerContext> {
 
     // Append cash position to vault summary if present
     if (profileData?.vault_cash) {
-      const cashAmt = parseFloat(profileData.vault_cash.amount || '0');
+      const cashAmt = parseCashAmount(profileData.vault_cash.amount);
       if (cashAmt > 0) {
         const currency = profileData.vault_cash.currency ?? profileData.vault_base_currency ?? 'USD';
         const cashLine = `• Cash [cash] (${currency} ${cashAmt.toLocaleString('en-US')})`;

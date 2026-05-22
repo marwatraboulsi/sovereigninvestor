@@ -23,6 +23,7 @@ import { useFxRates, convertCurrency } from '@/hooks/useFxRates';
 import { TickerSearch } from '@/components/TickerSearch';
 import { getSector, inferCurrency, getQuoteSymbol } from '@/data/tickerSearch';
 import type { TickerInfo, AssetType } from '@/data/tickerSearch';
+import { parseCashAmount } from '@/utils/parseCurrency';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -536,7 +537,7 @@ export default function VaultScreen() {
       total += convertCurrency(qty * price, currency, baseCurrency, fxRates);
       hasValue = true;
     }
-    const cashAmt = parseFloat(cash.amount || '0');
+    const cashAmt = parseCashAmount(cash.amount);
     if (cashAmt > 0) {
       total += convertCurrency(cashAmt, cash.currency, baseCurrency, fxRates);
       hasValue = true;
@@ -568,7 +569,7 @@ export default function VaultScreen() {
       values[h.id] = valueUSD;
       total        += valueUSD;
     }
-    const cashAmt = parseFloat(cash.amount || '0');
+    const cashAmt = parseCashAmount(cash.amount);
     const cashUSD = cashAmt > 0 && fxRates
       ? convertCurrency(cashAmt, cash.currency, 'USD', fxRates)
       : cashAmt;
@@ -739,7 +740,7 @@ export default function VaultScreen() {
           <PortfolioSummary holdings={displayHoldings} cash={displayCash} />
 
           {/* Total portfolio value */}
-          {(holdings.length > 0 || parseFloat(cash.amount) > 0) && (
+          {(holdings.length > 0 || parseCashAmount(cash.amount) > 0) && (
             <TotalValueCard
               totalValue={totalValue}
               baseCurrency={baseCurrency}
