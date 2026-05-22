@@ -47,7 +47,6 @@ Create a `.env` file in the project root (gitignored — never commit it).
 ```
 EXPO_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-EXPO_PUBLIC_SERP_API_KEY=your_serp_api_key
 EXPO_PUBLIC_VOYAGE_API_KEY=your_voyage_api_key
 ```
 
