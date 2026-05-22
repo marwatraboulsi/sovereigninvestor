@@ -23,7 +23,7 @@ import { useFxRates, convertCurrency } from '@/hooks/useFxRates';
 import { TickerSearch } from '@/components/TickerSearch';
 import { getSector, inferCurrency, getQuoteSymbol } from '@/data/tickerSearch';
 import type { TickerInfo, AssetType } from '@/data/tickerSearch';
-import { parseCashAmount } from '@/utils/parseCurrency';
+import { parseCashAmount, formatCashDisplay } from '@/utils/parseCurrency';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -335,7 +335,7 @@ function HoldingRow({
                   adjustsFontSizeToFit
                   minimumFontScale={0.65}
                 >
-                  {(livePrice * parseFloat(holding.quantity || '0')).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {(livePrice * parseFloat(holding.quantity || '0')).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Text>
                 {liveAllocation != null && (
                   <Text style={row.suffix}>{liveAllocation.toFixed(1)}%</Text>
@@ -365,7 +365,7 @@ function TotalValueCard({
   const [open, setOpen] = useState(false);
 
   const formatted = totalValue != null
-    ? totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    ? totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : null;
 
   return (
@@ -792,7 +792,12 @@ export default function VaultScreen() {
                   <TextInput
                     style={s.cashInput}
                     value={cash.amount}
-                    onChangeText={(v) => updateCash({ amount: v.replace(/[^0-9.]/g, '') })}
+                    onChangeText={(v) => updateCash({ amount: v.replace(/[^0-9.,]/g, '') })}
+                    onBlur={() => {
+                      const parsed = parseCashAmount(cash.amount);
+                      const normalised = parsed > 0 ? formatCashDisplay(parsed) : '';
+                      if (normalised !== cash.amount) updateCash({ amount: normalised });
+                    }}
                     placeholder="0.00"
                     placeholderTextColor={G2}
                     keyboardType="decimal-pad"

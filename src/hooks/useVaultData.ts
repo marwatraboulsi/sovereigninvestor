@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { parseCashAmount } from '@/utils/parseCurrency';
+import { parseCashAmount, formatCashDisplay } from '@/utils/parseCurrency';
 
 export interface VaultHolding {
   id: string;
@@ -75,7 +75,7 @@ export function formatPortfolioForReview(data: VaultData): string {
 
   const cashAmt = parseCashAmount(data.cash.amount);
   if (cashAmt > 0) {
-    lines.push(`• Cash ${data.cash.currency} ${cashAmt.toLocaleString()}`);
+    lines.push(`• Cash ${data.cash.currency} ${formatCashDisplay(cashAmt)}`);
   }
 
   if (lines.length === 1) return '';

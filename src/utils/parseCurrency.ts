@@ -12,6 +12,21 @@
  * Rule of thumb: if a single dot is followed by exactly 3 digits and nothing
  * else, it is treated as a thousands separator rather than a decimal point.
  */
+/**
+ * formatCashDisplay — formats a parsed number as a US-locale string.
+ * Always uses en-US so display is consistent regardless of device locale.
+ *   20000    → "20,000"
+ *   20000.5  → "20,000.50"
+ */
+export function formatCashDisplay(amount: number): string {
+  if (amount === 0) return '';
+  const hasDecimals = amount % 1 !== 0;
+  return amount.toLocaleString('en-US', {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+}
+
 export function parseCashAmount(raw: string | undefined | null): number {
   const s = (raw ?? '').trim().replace(/\s/g, '');
   if (!s) return 0;
